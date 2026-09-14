@@ -1,0 +1,130 @@
+name: Validate generated content
+
+# The pipeline's input is untrusted web content and its author is an agent with
+# write access, so this workflow is the trust boundary. It runs on the pull
+# request Jules opens, and nothing merges without passing it.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUGO_VERSION: 0.166.0
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      clean: ${{ steps.verdict.outputs.clean }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The allowlist check comes first: if the diff touches a workflow or the
+      # scripts, nothing else it says can be trusted.
+      - name: Path allowlist
+        run: |
+          python3 automation/scripts/pathguard.py --base "origin/${{ github.base_ref }}"
+
+      - name: Script self-tests
+        run: |
+          python3 automation/scripts/test_idstate.py
+          python3 automation/scripts/test_pathguard.py
+          python3 automation/scripts/test_validate.py
+          python3 automation/scripts/test_arxiv.py
+
+      - name: Content schema
+        run: python3 automation/scripts/validate.py
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install Hugo extended
+        run: |
+          wget -q -O "${{ runner.temp }}/hugo.deb" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          sudo dpkg -i "${{ runner.temp }}/hugo.deb"
+
+      - name: Fetch theme
+        run: hugo mod get -u github.com/adityatelange/hugo-PaperMod
+
+      # validate.py rejects future and non-UTC dates, but only a real build
+      # proves the page survives Hugo. buildFuture=false drops such pages
+      # silently, so "it built" is not the same as "the page exists".
+      - name: Build and assert the new pages exist
+        run: |
+          hugo --minify --baseURL "https://irboi746.github.io/research_diary/" -d ./public
+
+          missing=0
+          for f in $(git diff --name-only "origin/${{ github.base_ref }}...HEAD" \
+                     -- 'content/news/*.md' 'content/research/*.md'); do
+            [ "$(basename "$f")" = "_index.md" ] && continue
+            [ -f "$f" ] || continue
+
+            # Honour an explicit slug; otherwise Hugo uses the filename.
+            slug=$(sed -n 's/^slug *= *"\(.*\)"/\1/p' "$f" | head -1)
+            [ -n "$slug" ] || slug=$(basename "$f" .md)
+            section=$(echo "$f" | cut -d/ -f2)
+
+            if [ -f "public/$section/$slug/index.html" ]; then
+              echo "ok      $f -> /$section/$slug/"
+            else
+              echo "MISSING $f -> expected public/$section/$slug/index.html"
+              missing=$((missing + 1))
+            fi
+          done
+
+          if [ "$missing" -gt 0 ]; then
+            echo
+            echo "$missing page(s) did not render. The usual cause is a date Hugo"
+            echo "considers to be in the future, which buildFuture=false drops silently."
+            exit 1
+          fi
+
+      - name: Warn on Hugo diagnostics
+        run: |
+          hugo --minify --baseURL "https://irboi746.github.io/research_diary/" -d ./public2 2>&1 \
+            | tee build.log
+          if grep -Eiq '^(WARN|ERROR)' build.log; then
+            echo "Hugo reported warnings or errors:"
+            grep -Ei '^(WARN|ERROR)' build.log
+            exit 1
+          fi
+
+      - id: verdict
+        run: echo "clean=true" >> "$GITHUB_OUTPUT"
+
+  merge:
+    needs: validate
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.validate.outputs.clean == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Merge the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --squash --delete-branch "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"
+
+      # A merge made with GITHUB_TOKEN does not raise a push event, so pages.yml
+      # would never fire and the site would quietly stop updating. workflow_dispatch
+      # is exempt from that rule, so trigger the deploy explicitly.
+      - name: Trigger the Pages deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pages.yml --ref main --repo "${{ github.repository }}"

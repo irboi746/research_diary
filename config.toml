@@ -5,19 +5,21 @@
 # If your theme is in the themes directory, you just need to specify its name.
 #
 baseURL = "/"
-title = "test-hugo"
+title = "research_diary"
 theme = ["github.com/adityatelange/hugo-PaperMod"]
 
-[pagination]
-pagerSize = 5
-
+# These must stay ABOVE the first [table] header. TOML scopes every key after a
+# header into that table, so when they sat below [pagination] Hugo never saw
+# them -- including buildFuture, which the content pipeline depends on.
 enableInlineShortcodes = true
 enableRobotsTXT = true
 buildDrafts = false
 buildFuture = false
 buildExpired = false
 enableEmoji = true
-mainsections = ["posts"]
+
+[pagination]
+pagerSize = 5
 
 [minify]
 disableXML = true
@@ -32,16 +34,16 @@ tag = "tags"
 series = "series"
 
 [[languages.en.menu.main]]
-name = "About"
-url = "about/"
+name = "News"
+url = "news/"
 weight = 1
 [[languages.en.menu.main]]
-name = "Posts"
-url = "posts/"
+name = "Research"
+url = "research/"
 weight = 2
 [[languages.en.menu.main]]
-name = "Project Repos"
-url = "project-repos/"
+name = "About"
+url = "about/"
 weight = 3
 
 [outputs]
@@ -49,6 +51,8 @@ home = ["HTML", "RSS"]
 
 [params]
 env = "production"
+# Which sections appear in the homepage list. PaperMod reads this from params.
+mainSections = ["news", "research"]
 defaultTheme = "auto"
 ShowShareButtons = true
 ShowReadingTime = true
@@ -61,8 +65,8 @@ ShowPageNums = true
 ShowToc = true
 
 [params.homeInfoParams]
-Title = "test-hugo"
-Content = "Boilerplate Hugo + PaperMod site. Replace this in config.toml."
+Title = "research_diary"
+Content = "A technical research diary: daily briefs on new security and CS work, plus long-form deep dives."
 
 [markup.goldmark.renderer]
 unsafe = true

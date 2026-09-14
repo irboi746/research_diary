@@ -1,10 +1,33 @@
-# test-hugo
+# research_diary
 
-Boilerplate [Hugo](https://gohugo.io) site using the
-[PaperMod](https://github.com/adityatelange/hugo-PaperMod) theme, deployed to
-[GitHub Pages](https://docs.github.com/en/pages).
+A technical research diary: daily briefs on newly published security and CS work, plus long-form
+deep dives. Content is researched and written by [Google Jules](https://jules.google/), built with
+[Hugo](https://gohugo.io) and [PaperMod](https://github.com/adityatelange/hugo-PaperMod), and
+published to [GitHub Pages](https://docs.github.com/en/pages).
 
-Fork or copy this repo to start a new site. Everything under `content/` is placeholder text.
+Sources: arXiv, USENIX, DEF CON, Black Hat, Off-by-One — plus open web search, so the diary is not
+limited to those.
+
+## How it works
+
+```
+Jules web console  ──>  Jules VM reads AGENTS.md  ──>  pull request
+                                                          │
+                              validate-content.yml  <─────┘
+                              path guard, schema, Hugo build
+                                                          │
+                                           auto-merge ────┴──>  pages.yml  ──>  GitHub Pages
+```
+
+Nothing in this repository calls Jules. The schedule and the prompts live in the Jules console; the
+repository carries the specification Jules reads (`AGENTS.md`), the tooling it runs
+(`automation/scripts/`), and the checks that gate its output.
+
+| Layer | Owns |
+|---|---|
+| Jules console | Repo connection, Initial Setup, the daily scheduled task, manual deep dives |
+| This repo | `AGENTS.md`, research scope, helper scripts, dedup state, Hugo layout |
+| GitHub Actions | PR validation, auto-merge, deploy, staleness canary |
 
 ## Quick start
 
@@ -23,9 +46,11 @@ Fork or copy this repo to start a new site. Everything under `content/` is place
    hugo server
    ```
 
-1. Rename the site — `title` and `[params.homeInfoParams] Title` in `config.toml`, and the
-   `module` line in `go.mod`.
-1. Replace the placeholder pages in `content/`.
+1. Run the pipeline's own tests — no dependencies needed:
+
+   ```shell
+   for t in automation/scripts/test_*.py; do python3 "$t" || break; done
+   ```
 
 No local Hugo install? Use a Docker image (CI pins its own Hugo version, so this approximates CI
 rather than matching it exactly):
@@ -46,10 +71,63 @@ Short version:
 
 | Change | Where |
 |---|---|
+| What gets researched (interests, sources, tags) | `automation/config/topics.toml` |
+| How Jules behaves | `AGENTS.md` |
 | Site title, menus, params | `config.toml` |
 | Colours, fonts, layout geometry | `assets/css/extended/custom.css` |
 | Pages and posts | `content/` |
 | Files served at site root | `static/` |
+
+## The content pipeline
+
+### One-time setup in the Jules console
+
+1. Connect `irboi746/research_diary` (installs the Jules GitHub App).
+2. Leave **Initial Setup** empty. Python 3.12 is preinstalled in the Jules VM and every script here
+   is stdlib-only, so there is nothing to install.
+3. Create the scheduled task — but only after a manual run has produced output you trust.
+
+### The console prompts
+
+These live only in the Jules UI, which is not version controlled and cannot be restored from git.
+They are recorded here so they can be recreated:
+
+**Daily brief** — Scheduled Task, Daily:
+
+```
+Run the daily brief pipeline exactly as specified in AGENTS.md.
+```
+
+**Deep dive** — a normal task, run by hand:
+
+```
+Run the deep research pipeline as specified in AGENTS.md. Topic: <your topic>
+```
+
+They are one line on purpose. Everything else lives in `AGENTS.md` and `automation/config/topics.toml`,
+where it is reviewable and diffable — and because a Jules scheduled task **cannot be edited** once
+created, only deleted and recreated. Keeping the prompt stable means iterating on behaviour is a
+pull request, not a UI round trip.
+
+### What guards the output
+
+`validate-content.yml` runs on every pull request Jules opens:
+
+1. **Path guard** — the diff may only touch `content/news/**`, `content/research/**` and
+   `automation/state/**`. The pipeline's input is untrusted web content fed to an agent with repo
+   write access, so this is the boundary that stops a poisoned paper from editing a workflow.
+2. **Schema** — TOML frontmatter, RFC3339 UTC date, tags from the controlled vocabulary, required
+   sections, a source URL on every item.
+3. **Build** — Hugo must actually render each changed page. `buildFuture = false` means a
+   future-dated page is dropped *silently*, so a green build is not by itself evidence.
+
+Passing all three auto-merges and triggers the deploy. Failing leaves the pull request open.
+
+### Health
+
+Nothing in this repo observes the pipeline, so a deleted scheduled task looks exactly like a quiet
+week. `staleness.yml` runs weekly and opens an issue if no brief has landed in three days. It is the
+only monitoring in the system.
 
 ## Deployment
 

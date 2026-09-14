@@ -1,1 +1,36 @@
-/* Custom styles for this site */
+/* Custom styles for this site.
+ *
+ * Concatenated after the theme's CSS, so these override PaperMod. Note that
+ * PaperMod is installed as a Hugo module and floats to master, so the dark-mode
+ * selector is :root[data-theme="dark"] -- the older .dark selector silently does
+ * nothing. See REFERENCE_*.md section 2.
+ */
+
+/* Briefs carry several papers per page, each an h2. Give those entries enough
+ * separation to scan, since the page is read as a list rather than as prose. */
+.post-content h2 {
+  margin-top: 2.2em;
+  padding-top: 0.6em;
+  border-top: 1px solid var(--border);
+}
+
+.post-content h2:first-of-type {
+  margin-top: 1.2em;
+}
+
+/* Reference lines and the "Also published" roll are dense and secondary to the
+ * summary bullets above them. */
+.post-content h2#also-published + ul,
+.post-content h2#references + ol {
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+
+.post-content h2#references + ol li {
+  margin-bottom: 0.5em;
+}
+
+/* Long DOI and arXiv URLs otherwise overflow the content column on phones. */
+.post-content a[href^="http"] {
+  overflow-wrap: anywhere;
+}

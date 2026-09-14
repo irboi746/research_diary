@@ -1,0 +1,133 @@
+#
+# Research scope for the automated pipelines.
+#
+# TOML rather than YAML so the scripts can parse it with stdlib `tomllib` — no
+# pip install, which keeps the Jules console's Initial Setup empty.
+#
+# Read by: automation/scripts/{arxiv,sources,validate}.py
+# Described to Jules by: AGENTS.md
+#
+
+# Drives relevance ranking and rejection. Be concrete — this is the real filter,
+# far more than the source list is.
+interests = [
+  "binary exploitation, memory safety, and mitigation bypasses",
+  "fuzzing and automated vulnerability discovery",
+  "reverse engineering and binary analysis tooling",
+  "supply-chain security, including ML model and package ecosystems",
+  "side-channel and microarchitectural attacks",
+  "applied cryptography failures in deployed systems",
+  "security of LLM-based systems and agents",
+]
+
+# ---------------------------------------------------------------------------
+# Controlled tag vocabulary. The validator rejects anything not on this list, so
+# tags stay a usable index instead of fragmenting into near-duplicates.
+# Add new tags here deliberately.
+# ---------------------------------------------------------------------------
+
+tags = [
+  # arXiv categories
+  "cs.CR", "cs.AI", "cs.SE", "cs.LG", "cs.NI", "cs.OS", "cs.PL",
+  # topics
+  "binary-analysis",
+  "cryptography",
+  "exploitation",
+  "firmware",
+  "fuzzing",
+  "hardware",
+  "kernel",
+  "llm-security",
+  "malware",
+  "memory-safety",
+  "mitigations",
+  "network-security",
+  "privacy",
+  "protocol-analysis",
+  "reverse-engineering",
+  "side-channel",
+  "supply-chain",
+  "tooling",
+  "vulnerability-discovery",
+  "web-security",
+  # venues
+  "arxiv", "usenix", "defcon", "blackhat", "off-by-one",
+]
+
+# Papers whose sole contribution is a product pitch. Jules rejects on these.
+reject = [
+  "withdrawn or superseded by a newer version already covered",
+  "vendor marketing whitepaper whose conclusion is a product",
+  "no technical detail beyond an abstract or press release",
+  "already covered under a different URL or venue",
+]
+
+# How many items get a full write-up in a daily brief. The rest go to the
+# overflow link roll — still recorded as seen, so they do not resurface.
+brief_max_summarized = 8
+
+# ---------------------------------------------------------------------------
+# Compulsory sources. Every daily run must cover all of these.
+# `retrieval` selects the tier: "api" (scripted query) or "urls" (enumerated
+# pages that Jules reads itself).
+# ---------------------------------------------------------------------------
+
+[[sources]]
+name = "arXiv"
+retrieval = "api"
+categories = ["cs.CR", "cs.AI", "cs.SE"]
+window = "48h"
+
+[[sources]]
+name = "USENIX Security"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = [
+  "https://www.usenix.org/conference/usenixsecurity{yy}/technical-sessions",
+]
+
+[[sources]]
+name = "USENIX WOOT"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = ["https://www.usenix.org/conference/woot{yy}/technical-sessions"]
+
+[[sources]]
+name = "DEF CON"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = [
+  "https://defcon.org/html/links/dc-archives/dc-{dc}-archive.html",
+  "https://media.defcon.org/DEF%20CON%20{dc}/",
+]
+
+[[sources]]
+name = "Black Hat"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = ["https://www.blackhat.com/us-{yy}/briefings/schedule/"]
+
+[[sources]]
+name = "Off-by-One"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = ["https://offbyone.sg/"]
+
+# ---------------------------------------------------------------------------
+# Tier 3. The compulsory sources are a floor, not a ceiling.
+# ---------------------------------------------------------------------------
+
+[discovery]
+enabled = true
+guidance = """
+Search beyond the compulsory sources for work matching `interests`: security
+research blogs, vendor and CERT advisories, protocol and implementation
+documentation, IACR eprint, NDSS/CCS/Oakland, and regional conferences. Anything
+technical and verifiable is in scope.
+"""
+
