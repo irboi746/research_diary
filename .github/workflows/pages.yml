@@ -1,0 +1,67 @@
+name: Deploy Hugo site to Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; don't cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  HUGO_VERSION: 0.166.0
+  THEME_URL: github.com/adityatelange/hugo-PaperMod
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Go is required because the theme is a Hugo module, not a submodule.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install Hugo extended
+        run: |
+          wget -O "${{ runner.temp }}/hugo.deb" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          sudo dpkg -i "${{ runner.temp }}/hugo.deb"
+
+      # Resolves the real Pages URL, including the /research_diary subpath.
+      # This is the GitHub equivalent of GitLab's $CI_PAGES_URL.
+      - name: Configure Pages
+        id: pages
+        if: github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+
+      - name: Fetch theme
+        run: hugo mod get -u "$THEME_URL"
+
+      - name: Build
+        run: hugo --minify --baseURL "${{ steps.pages.outputs.base_url || 'http://localhost:1313' }}/"
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: ./public
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

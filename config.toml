@@ -1,0 +1,75 @@
+#
+# Theme setup
+#
+# If you use go mod to install your theme, you must use the URL of the theme.
+# If your theme is in the themes directory, you just need to specify its name.
+#
+baseURL = "/"
+title = "test-hugo"
+theme = ["github.com/adityatelange/hugo-PaperMod"]
+
+[pagination]
+pagerSize = 5
+
+enableInlineShortcodes = true
+enableRobotsTXT = true
+buildDrafts = false
+buildFuture = false
+buildExpired = false
+enableEmoji = true
+mainsections = ["posts"]
+
+[minify]
+disableXML = true
+
+[languages.en]
+languageName = "English"
+weight = 1
+
+[languages.en.taxonomies]
+category = "categories"
+tag = "tags"
+series = "series"
+
+[[languages.en.menu.main]]
+name = "About"
+url = "about/"
+weight = 1
+[[languages.en.menu.main]]
+name = "Posts"
+url = "posts/"
+weight = 2
+[[languages.en.menu.main]]
+name = "Project Repos"
+url = "project-repos/"
+weight = 3
+
+[outputs]
+home = ["HTML", "RSS"]
+
+[params]
+env = "production"
+defaultTheme = "auto"
+ShowShareButtons = true
+ShowReadingTime = true
+ShowPostNavLinks = true
+ShowBreadCrumbs = true
+ShowCodeCopyButtons = true
+ShowRssButtonInSectionTermList = true
+ShowAllPagesInArchive = true
+ShowPageNums = true
+ShowToc = true
+
+[params.homeInfoParams]
+Title = "test-hugo"
+Content = "Boilerplate Hugo + PaperMod site. Replace this in config.toml."
+
+[markup.goldmark.renderer]
+unsafe = true
+[markup.highlight]
+noClasses = false
+
+[services.instagram]
+disableInlineCSS = true
+[services.x]
+disableInlineCSS = true
