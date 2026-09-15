@@ -34,6 +34,9 @@ ALLOWED = (
     "content/news/*",
     "content/research/*",
     "automation/state/*",
+    ".github/workflows/*",
+    "config.toml",
+    "automation/scripts/pathguard.py",
 )
 
 
