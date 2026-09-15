@@ -56,6 +56,7 @@ def build(cfg: dict, years: int, only: str | None) -> list[tuple[str, int, str]]
     """Return (source_name, year, url) for each page worth visiting."""
     this_year = dt.datetime.now(dt.timezone.utc).year
     out: list[tuple[str, int, str]] = []
+    seen_urls = set()
     for src in cfg.get("sources", []):
         if src.get("retrieval") != "urls":
             continue
@@ -68,9 +69,10 @@ def build(cfg: dict, years: int, only: str | None) -> list[tuple[str, int, str]]
                 # A template with no year placeholder is a single standing page;
                 # emit it once rather than once per year.
                 url = expand(t, year)
-                if url == t and any(u == url for _, _, u in out):
+                if url == t and url in seen_urls:
                     continue
                 out.append((name, year, url))
+                seen_urls.add(url)
     return out
 
 
