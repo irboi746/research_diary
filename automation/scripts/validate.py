@@ -11,7 +11,7 @@ bugs, and this file is the thing standing between a malformed post and a silentl
 broken site.
 
 Usage:
-    validate.py                    # every file under content/news and content/research
+    validate.py                    # every file under the content sections
     validate.py path/to/post.md    # specific files
 """
 
@@ -26,14 +26,33 @@ import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "automation" / "config" / "topics.toml"
-SECTIONS = {"news": ROOT / "content" / "news", "research": ROOT / "content" / "research"}
+SECTIONS = {
+    "arxiv": ROOT / "content" / "arxiv",
+    "news": ROOT / "content" / "news",
+    "research": ROOT / "content" / "research",
+}
+
+# The two brief sections. They share every rule; they are split because arXiv is
+# an API query over a 48h window and the conference venues are pages read on an
+# "unseen" window, which are different cadences, not different formats.
+BRIEFS = ("arxiv", "news")
 
 FM = re.compile(r"\A\+\+\+\s*\n(.*?)\n\+\+\+\s*\n(.*)\Z", re.DOTALL)
 SLUG = re.compile(r"\A[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 URL = re.compile(r"https?://[^\s<>()\[\]]+")
 
-NEWS_NAME = re.compile(r"\A\d{4}-\d{2}-\d{2}-daily-brief\.md\Z")
-RESEARCH_NAME = re.compile(r"\A\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md\Z")
+# Filename shape per section, with the form to quote back on a mismatch. A dict
+# rather than a conditional: this was `NEWS_NAME if section == "news" else
+# RESEARCH_NAME`, so any section added later silently inherited the *research*
+# pattern instead of failing.
+FILENAMES = {
+    "arxiv": (re.compile(r"\A\d{4}-\d{2}-\d{2}-arxiv-brief\.md\Z"), "YYYY-MM-DD-arxiv-brief.md"),
+    "news": (re.compile(r"\A\d{4}-\d{2}-\d{2}-daily-brief\.md\Z"), "YYYY-MM-DD-daily-brief.md"),
+    "research": (
+        re.compile(r"\A\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md\Z"),
+        "YYYY-MM-DD-<topic-slug>.md",
+    ),
+}
 
 MAX_SLUG_LEN = 60
 
@@ -199,7 +218,8 @@ def validate_file(path: pathlib.Path, vocab: set[str]) -> list[str]:
     if section is None:
         # relative_to() would raise for a path outside the repo, so report the
         # absolute path rather than crashing on the way to saying this.
-        return [f"{path}: not under content/news or content/research"]
+        known = " or ".join(f"content/{name}" for name in SECTIONS)
+        return [f"{path}: not under {known}"]
 
     rel = path.relative_to(ROOT)
 
@@ -212,11 +232,9 @@ def validate_file(path: pathlib.Path, vocab: set[str]) -> list[str]:
         check_markup(path.read_text(encoding="utf-8"), errors)
         return [f"{rel}: {e}" for e in errors]
 
-    pattern = NEWS_NAME if section == "news" else RESEARCH_NAME
+    pattern, shape = FILENAMES[section]
     if not pattern.match(path.name):
-        errors.append(
-            f"filename must match {'YYYY-MM-DD-daily-brief.md' if section == 'news' else 'YYYY-MM-DD-<topic-slug>.md'}"
-        )
+        errors.append(f"filename must match {shape}")
 
     parsed = split_frontmatter(path.read_text(encoding="utf-8"), errors)
     if parsed is None:

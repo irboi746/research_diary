@@ -12,9 +12,13 @@ on:
   workflow_dispatch:
     inputs:
       max_age_days:
-        description: "Open an issue if the newest brief is older than this"
+        description: "Open an issue if the newest arXiv brief is older than this"
         required: false
         default: "3"
+      max_conference_age_days:
+        description: "Same, for conference briefs"
+        required: false
+        default: "14"
 
 permissions:
   contents: read
@@ -32,44 +36,66 @@ jobs:
         # of `3"; curl evil.tld | sh; #` would execute here.
         env:
           MAX_AGE_DAYS: ${{ github.event.inputs.max_age_days || '3' }}
+          MAX_CONFERENCE_AGE_DAYS: ${{ github.event.inputs.max_conference_age_days || '14' }}
         run: |
-          MAX="$MAX_AGE_DAYS"
-          # `[ "$age" -gt "$MAX" ]` below errors out on anything non-numeric.
-          case "$MAX" in ''|*[!0-9]*) MAX=3 ;; esac
+          # Two feeds, two thresholds. arXiv runs daily against a 48h API window,
+          # so three days of silence means something broke. The conference venues
+          # are on an "unseen" window and publish in an annual burst, so they go
+          # quiet between seasons -- holding them to three days would file an
+          # issue most weeks and train everyone to ignore it.
+          check_section() {
+            dir="$1"; max="$2"; label="$3"
+            # `[ "$age" -gt "$max" ]` below errors out on anything non-numeric.
+            case "$max" in ''|*[!0-9]*) max=3 ;; esac
 
-          newest=$(ls -1 content/news/*.md 2>/dev/null \
-                   | grep -v '_index.md' \
-                   | sed -n 's|.*/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)-.*|\1|p' \
-                   | sort | tail -1)
+            newest=$(ls -1 "content/$dir"/*.md 2>/dev/null \
+                     | grep -v '_index.md' \
+                     | sed -n 's|.*/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)-.*|\1|p' \
+                     | sort | tail -1)
 
-          if [ -z "$newest" ]; then
-            echo "No daily briefs found at all."
-            {
-              echo "stale=true"
-              echo "newest=none"
-              echo "age=n/a"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
+            if [ -z "$newest" ]; then
+              echo "No $label found at all." >&2
+              printf '%s\n%s\n%s\n' none n/a true
+              return
+            fi
+
+            age=$(( ( $(date -u +%s) - $(date -u -d "$newest" +%s) ) / 86400 ))
+            echo "Newest $label: $newest (${age} day(s) old, threshold ${max})" >&2
+            printf '%s\n%s\n%s\n' "$newest" "$age" \
+              "$([ "$age" -gt "$max" ] && echo true || echo false)"
+          }
+
+          { read -r a_newest; read -r a_age; read -r a_stale; } < <(
+            check_section arxiv "$MAX_AGE_DAYS" "arXiv brief")
+          { read -r c_newest; read -r c_age; read -r c_stale; } < <(
+            check_section news "$MAX_CONFERENCE_AGE_DAYS" "conference brief")
+
+          if [ "$a_stale" = true ] || [ "$c_stale" = true ]; then
+            stale=true
+          else
+            stale=false
           fi
 
-          age=$(( ( $(date -u +%s) - $(date -u -d "$newest" +%s) ) / 86400 ))
-          echo "Newest brief: $newest (${age} day(s) old, threshold ${MAX})"
           {
-            echo "newest=$newest"
-            echo "age=$age"
-            echo "stale=$([ "$age" -gt "$MAX" ] && echo true || echo false)"
+            echo "arxiv_newest=$a_newest"
+            echo "arxiv_age=$a_age"
+            echo "conference_newest=$c_newest"
+            echo "conference_age=$c_age"
+            echo "stale=$stale"
           } >> "$GITHUB_OUTPUT"
 
       - name: Open an issue if stale
         if: steps.age.outputs.stale == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NEWEST: ${{ steps.age.outputs.newest }}
-          AGE: ${{ steps.age.outputs.age }}
+          ARXIV_NEWEST: ${{ steps.age.outputs.arxiv_newest }}
+          ARXIV_AGE: ${{ steps.age.outputs.arxiv_age }}
+          CONF_NEWEST: ${{ steps.age.outputs.conference_newest }}
+          CONF_AGE: ${{ steps.age.outputs.conference_age }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TITLE="Daily brief pipeline looks stale"
+          TITLE="Brief pipeline looks stale"
 
           # Don't file a fresh issue every week for one ongoing outage.
           open_count=$(gh issue list --repo "$REPO" --state open \
@@ -80,13 +106,17 @@ jobs:
           fi
 
           {
-            echo "The newest daily brief is \`$NEWEST\` ($AGE day(s) old)."
+            echo "- Newest arXiv brief: \`$ARXIV_NEWEST\` ($ARXIV_AGE day(s) old)."
+            echo "- Newest conference brief: \`$CONF_NEWEST\` ($CONF_AGE day(s) old)."
+            echo
+            echo "At least one is past its threshold. The two run on separate schedules, so"
+            echo "check which one stopped before assuming both did."
             echo
             echo "Nothing in this repository drives the pipeline - Jules runs it from its web"
             echo "console - so this check is the only signal that it has stopped. Worth checking,"
             echo "in rough order of likelihood:"
             echo
-            echo "- The scheduled task in the Jules console: is it still there, and when did it last run?"
+            echo "- The scheduled tasks in the Jules console: are they still there, and when did each last run?"
             echo "- The repository connection and the Jules GitHub App installation."
             echo "- Any open pull request from Jules that failed validation and is sitting unmerged."
             echo "- Whether \`automation/config/topics.toml\` has been narrowed until it matches nothing."

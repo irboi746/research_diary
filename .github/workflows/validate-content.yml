@@ -103,7 +103,7 @@ jobs:
               missing=$((missing + 1))
             fi
           done < <(git diff --name-only -z "origin/$BASE_REF...HEAD" \
-                     -- 'content/news/*.md' 'content/research/*.md')
+                     -- 'content/arxiv/*.md' 'content/news/*.md' 'content/research/*.md')
 
           if [ "$missing" -gt 0 ]; then
             echo

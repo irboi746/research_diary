@@ -24,18 +24,51 @@ VOCAB = V.load_vocabulary()
 PAST = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
 FUTURE = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+# Identifiers here are deliberately real-looking rather than 1234-style
+# placeholders: check_identifiers rejects those, so a placeholder fixture would
+# fail every test in this file for the wrong reason.
+PAPER = "https://www.usenix.org/conference/usenixsecurity25/presentation/mu"
+
 GOOD_NEWS = f'''+++
-title = "Daily Brief"
+title = "Conference Brief"
 date = {PAST}
 type = "news"
 tags = ["cs.CR", "fuzzing"]
+summary = "One talk on desynchronisation."
 +++
+
+## In brief
+
+- One talk, on request smuggling.
 
 ## A Paper About Things
 
 - It does a thing.
+- It measures the thing.
+- The thing does not scale past one core.
 
-Source: https://arxiv.org/abs/2509.12345
+Source: {PAPER}
+'''
+
+GOOD_ARXIV = f'''+++
+title = "arXiv Brief"
+date = {PAST}
+type = "arxiv"
+tags = ["cs.CR", "fuzzing"]
+summary = "One preprint on desynchronisation."
++++
+
+## In brief
+
+- One preprint, on request smuggling.
+
+## A Preprint About Things
+
+- It does a thing.
+- It measures the thing.
+- The thing does not scale past one core.
+
+Source: {PAPER}
 '''
 
 GOOD_RESEARCH = f'''+++
@@ -47,22 +80,30 @@ slug = "fuzzing-state-of-the-art"
 +++
 
 ## Background
-Some background.
+Some background [1].
 
 ## Current State
-Where things stand. See https://arxiv.org/abs/2509.12345
+Where things stand [1].
 
 ## Future Outlook
 Where it is going.
 
 ## References
-1. Lovelace, A. "A Paper." USENIX Security 2025. https://arxiv.org/abs/2509.12345
+1. Mu, K. "The Silent Danger in HTTP." USENIX Security 2025. {PAPER}
 '''
 
 
-def run(name: str, filename: str, body: str, expect: str | None) -> None:
+def infer_section(filename: str) -> str:
+    if "arxiv-brief" in filename:
+        return "arxiv"
+    if "daily-brief" in filename or "news" in filename:
+        return "news"
+    return "research"
+
+
+def run(name: str, filename: str, body: str, expect: str | None, section: str | None = None) -> None:
     """expect=None means it must pass; otherwise the substring required in an error."""
-    section = "news" if "daily-brief" in filename or "news" in filename else "research"
+    section = section or infer_section(filename)
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)
         target = root / "content" / section
@@ -72,7 +113,9 @@ def run(name: str, filename: str, body: str, expect: str | None) -> None:
 
         saved_root, saved_sections = V.ROOT, V.SECTIONS
         V.ROOT = root
-        V.SECTIONS = {"news": root / "content" / "news", "research": root / "content" / "research"}
+        # Mirror whatever sections validate.py declares, so adding one there does
+        # not leave the tests quietly exercising the old pair.
+        V.SECTIONS = {name_: root / "content" / name_ for name_ in saved_sections}
         try:
             errors = V.validate_file(path, VOCAB)
         finally:
@@ -86,8 +129,31 @@ def run(name: str, filename: str, body: str, expect: str | None) -> None:
             FAILURES.append(f"{name}: expected an error containing {expect!r}, got {errors}")
 
 
-run("valid daily brief", "2026-09-15-daily-brief.md", GOOD_NEWS, None)
+run("valid conference brief", "2026-09-15-daily-brief.md", GOOD_NEWS, None)
+run("valid arxiv brief", "2026-09-15-arxiv-brief.md", GOOD_ARXIV, None)
 run("valid deep dive", "2026-09-15-fuzzing.md", GOOD_RESEARCH, None)
+
+# --- the sections must not be interchangeable --------------------------------
+run(
+    "arxiv brief filename is required in content/arxiv",
+    "2026-09-15-daily-brief.md",
+    GOOD_ARXIV,
+    "YYYY-MM-DD-arxiv-brief.md",
+    section="arxiv",
+)
+run(
+    "a deep-dive filename is not accepted in content/arxiv",
+    "2026-09-15-some-topic.md",
+    GOOD_ARXIV,
+    "YYYY-MM-DD-arxiv-brief.md",
+    section="arxiv",
+)
+run(
+    "wrong type for content/arxiv is rejected",
+    "2026-09-15-arxiv-brief.md",
+    GOOD_ARXIV.replace('type = "arxiv"', 'type = "news"'),
+    "type must be 'arxiv'",
+)
 
 # --- the A8 trap: future dates are dropped silently by Hugo -------------------
 run(
@@ -139,7 +205,7 @@ run(
 run(
     "missing source URL is rejected",
     "2026-09-15-daily-brief.md",
-    GOOD_NEWS.replace("Source: https://arxiv.org/abs/2509.12345", "Source: withheld"),
+    GOOD_NEWS.replace(f"Source: {PAPER}", "Source: withheld"),
     "no source URL",
 )
 run(
@@ -163,7 +229,7 @@ run(
 run(
     "missing title is reported",
     "2026-09-15-daily-brief.md",
-    GOOD_NEWS.replace('title = "Daily Brief"\n', ""),
+    GOOD_NEWS.replace('title = "Conference Brief"\n', ""),
     "missing required key: title",
 )
 run(
@@ -189,7 +255,7 @@ run(
 run(
     "malformed TOML is reported",
     "2026-09-15-daily-brief.md",
-    GOOD_NEWS.replace('title = "Daily Brief"', "title = Daily Brief"),
+    GOOD_NEWS.replace('title = "Conference Brief"', "title = Conference Brief"),
     "not valid TOML",
 )
 run(

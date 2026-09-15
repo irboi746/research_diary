@@ -9,7 +9,8 @@ otherwise be merged automatically.
 So the trust boundary is here, not in the prompt. Whatever the agent was told or
 talked into, a pull request may only change:
 
-    content/news/**            the daily briefs
+    content/arxiv/**           the arXiv briefs
+    content/news/**            the conference briefs
     content/research/**        the deep dives
     automation/state/**        dedup bookkeeping
 
@@ -31,10 +32,11 @@ import subprocess
 import sys
 
 ALLOWED = (
-    # Only Markdown under the two content sections. Hugo serves a .html file in
-    # content/ verbatim, without Goldmark, so an allowlist that matched any
+    # Only Markdown under the three content sections. Hugo serves a .html file
+    # in content/ verbatim, without Goldmark, so an allowlist that matched any
     # extension would hand the agent a raw-HTML publishing primitive that
     # validate.py never sees — it only globs *.md.
+    "content/arxiv/*.md",
     "content/news/*.md",
     "content/research/*.md",
     "automation/state/*",
@@ -154,8 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     if violations:
         print(
             f"\npathguard: FAILED — {len(violations)} path(s) outside the allowlist.\n"
-            "Generated content may only touch content/news/, content/research/ and\n"
-            "automation/state/. This pull request needs a human to look at it.",
+            "Generated content may only touch content/arxiv/, content/news/,\n"
+            "content/research/ and automation/state/. This pull request needs a\n"
+            "human to look at it.",
             file=sys.stderr,
         )
         return 1

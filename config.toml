@@ -38,17 +38,21 @@ tag = "tags"
 series = "series"
 
 [[languages.en.menu.main]]
-name = "News"
-url = "news/"
+name = "arXiv"
+url = "arxiv/"
 weight = 1
 [[languages.en.menu.main]]
-name = "Research"
-url = "research/"
+name = "Conferences"
+url = "news/"
 weight = 2
+[[languages.en.menu.main]]
+name = "Deep Dives"
+url = "research/"
+weight = 3
 [[languages.en.menu.main]]
 name = "About"
 url = "about/"
-weight = 3
+weight = 4
 
 [outputs]
 home = ["HTML", "RSS"]
@@ -56,7 +60,7 @@ home = ["HTML", "RSS"]
 [params]
 env = "production"
 # Which sections appear in the homepage list. PaperMod reads this from params.
-mainSections = ["news", "research"]
+mainSections = ["arxiv", "news", "research"]
 defaultTheme = "auto"
 # Site-wide only. single.html gates the share_icons partial on
 # site.Params.ShowShareButtons, not .Param, so a per-page value is ignored --

@@ -22,6 +22,7 @@ FAILURES: list[str] = []
 # list below and leave the suite green. That is exactly what happened in a79aa37
 # and 990b2d8. Changing this tuple has to be a deliberate edit to this line.
 EXPECTED_ALLOWLIST = (
+    "content/arxiv/*.md",
     "content/news/*.md",
     "content/research/*.md",
     "automation/state/*",
@@ -35,6 +36,7 @@ if ALLOWED != EXPECTED_ALLOWLIST:
     )
 
 ALLOW = [
+    "content/arxiv/2026-09-15-arxiv-brief.md",
     "content/news/2026-09-15-daily-brief.md",
     "content/news/nested/thing.md",
     "content/research/2026-09-15-some-topic.md",
@@ -67,6 +69,8 @@ DENY = [
     "content/news/..\\..\\go.mod",
     # Near-misses that must not be confused for the allowed prefixes.
     "content/newsletter/x.md",
+    "content/arxivfoo/x.md",
+    "content/arxiv.md",
     "content/about.md",
     "automation/statecraft/x",
     "",
@@ -77,6 +81,8 @@ DENY = [
     "content/news/evil.js",
     "content/news/.gitattributes",
     "content/research/x.xml",
+    "content/arxiv/evil.html",
+    "content/arxiv/x.xml",
     # Whitespace must not be normalised away: a file really named "config.toml "
     # is a different path from "config.toml", and judging the stripped string
     # would let the real one through under the wrong verdict.

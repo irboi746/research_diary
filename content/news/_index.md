@@ -1,8 +1,9 @@
 +++
-title = "Daily Briefs"
+title = "Conference Briefs"
 url = "/news/"
-summary = "Short daily roundups of new technical security and CS research"
+summary = "Roundups of new conference proceedings and security research"
 +++
 
-Daily roundups of newly published work from arXiv, USENIX, DEF CON, Black Hat, Off-by-One and
-elsewhere. Each entry is a short summary with a link to the source.
+Roundups of newly published work from USENIX, DEF CON, Black Hat, Off-by-One and elsewhere on the
+web. Each entry is a short summary with a link to the source. Preprints are covered separately in
+[arXiv Briefs](/arxiv/).
