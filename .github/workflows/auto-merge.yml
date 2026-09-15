@@ -1,0 +1,126 @@
+name: Auto-merge validated content
+
+# This is the trust boundary. validate-content.yml is not.
+#
+# For a same-repo branch -- which is how Jules opens pull requests -- GitHub runs
+# `on: pull_request` workflows from the PR head. A pull request therefore supplies
+# its own copy of validate-content.yml AND its own copy of pathguard.py, and can
+# delete the guard step, or make allowed() return True, and mark itself clean.
+#
+# `on: workflow_run` is different: it always runs the copy of the workflow on the
+# default branch. Nothing a pull request contains can change one line of this
+# file. So the guard is re-run here, from main's checkout, against the PR's diff,
+# and that verdict is the one that merges.
+#
+# The invariant to preserve when editing: this workflow must never check out,
+# execute, or source anything from the pull request. It reads the PR's commits as
+# data -- git fetch and git diff -- and runs code only from main.
+
+on:
+  workflow_run:
+    workflows: ["Validate generated content"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-merge-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    # head_repository check keeps fork pull requests out, as before. The actor
+    # check keeps it to the pipeline's own account rather than any collaborator.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      ACTOR: ${{ github.event.workflow_run.actor.login }}
+    steps:
+      # main only. Never the pull request.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Only the pipeline's own pull requests auto-merge
+        run: |
+          set -euo pipefail
+          # Quoted so the [bot] suffix is matched literally, not as a glob class.
+          case "$ACTOR" in
+            "google-labs-jules[bot]"|"irboi746") ;;
+            *)
+              echo "Actor '$ACTOR' is not the content pipeline; leaving this PR for a human."
+              exit 1
+              ;;
+          esac
+
+      # Resolved from the API by head SHA, not read from an artifact the pull
+      # request produced -- a workflow_run job must not trust the run it follows.
+      - id: pr
+        name: Resolve the pull request
+        run: |
+          set -euo pipefail
+          num=$(gh pr list --repo "$REPO" --state open --base main \
+                  --json number,headRefOid \
+                  --jq "[.[] | select(.headRefOid == \"$HEAD_SHA\")] | .[0].number // empty")
+          if [ -z "$num" ]; then
+            echo "No open PR whose head is $HEAD_SHA; nothing to merge."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Resolved PR #$num for $HEAD_SHA"
+          echo "number=$num" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the pull request's commits
+        if: steps.pr.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          # Fetching and diffing commits does not execute anything from them.
+          git fetch --no-tags origin "+$HEAD_SHA:refs/pr-head"
+          git rev-parse --verify refs/pr-head
+
+      # The check that actually matters. main's guard, main's allowlist, the
+      # pull request's diff. A PR that rewrote its own pathguard.py sails through
+      # validate-content.yml and dies here.
+      #
+      # --head is what makes this work: the script comes from the checkout (main),
+      # the diff is computed against the fetched PR ref, and no PR file is on disk
+      # yet when this runs.
+      - name: Path allowlist, from main
+        if: steps.pr.outputs.found == 'true'
+        run: python3 automation/scripts/pathguard.py --base main --head refs/pr-head
+
+      - name: Content schema, from main
+        if: steps.pr.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          # Only now, once the guard has confirmed the diff touches nothing but
+          # content/*.md and automation/state/*, bring the PR's files into the
+          # tree. They are read as data by main's validator; nothing from the
+          # pull request is executed, and automation/scripts/ still comes from main.
+          git checkout refs/pr-head -- content automation/state
+          git status --short
+          python3 automation/scripts/validate.py
+
+      - name: Merge
+        if: steps.pr.outputs.found == 'true'
+        run: gh pr merge --squash --delete-branch "${{ steps.pr.outputs.number }}" --repo "$REPO"
+
+      # A merge made with GITHUB_TOKEN does not raise a push event, so pages.yml
+      # would never fire and the site would quietly stop updating. workflow_dispatch
+      # is exempt from that rule, so trigger the deploy explicitly.
+      - name: Trigger the Pages deploy
+        if: steps.pr.outputs.found == 'true'
+        run: gh workflow run pages.yml --ref main --repo "$REPO"

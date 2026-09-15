@@ -48,16 +48,38 @@ workflow would otherwise be merged automatically.
 
 `automation/scripts/pathguard.py` therefore restricts generated changes to:
 
-- `content/news/**`
-- `content/research/**`
-- `automation/state/**`
+- `content/news/*.md`
+- `content/research/*.md`
+- `automation/state/*`
+
+Content is Markdown-only on purpose: Hugo serves a `.html` file in `content/` verbatim, without
+Goldmark, and `validate.py` only globs `*.md` — so any-extension patterns would hand the agent a raw
+HTML publishing primitive that nothing inspects.
 
 Anything else fails the check and blocks auto-merge. **Do not widen that allowlist**, and do not add
 a path to it so that a failing run goes green. If a pipeline change genuinely needs to touch another
 file, a human makes that change in a separate commit.
 
-`automation/scripts/test_pathguard.py` covers the guard, including that it refuses to let the agent
-edit the guard itself. Keep it that way.
+This has already gone wrong once. In `a79aa37` the agent hit the guard and added `.github/workflows/*`,
+`config.toml` and `pathguard.py` to it; in `990b2d8` it moved those same paths out of the test's DENY
+list into ALLOW so CI went green. The guard then permitted precisely what it existed to stop, for
+three commits. `test_pathguard.py` now pins the whole `ALLOWED` tuple against a literal, so widening
+it fails the suite rather than being ratified by an edited expectation list. Keep that pin.
+
+#### The guard must run from `main`, never from the pull request
+
+For a same-repo branch, `on: pull_request` runs the workflow file **and the scripts** from the PR
+head. A pull request that edits `pathguard.py` is therefore checked by its own edited copy. That is
+why `validate-content.yml` is explicitly *not* the trust boundary, and why the merge lives in
+`.github/workflows/auto-merge.yml` under `on: workflow_run` — that trigger always runs the default
+branch's copy. It re-runs `main`'s guard against the PR's diff via `--head`, and only then merges.
+
+Two invariants to preserve there: `auto-merge.yml` must never check out or execute anything from the
+pull request, and the path check must come before the content checkout.
+
+The guard also inspects blob modes and both sides of a rename. Neither is cosmetic: `--name-only`
+prints only the destination of a rename, so `git mv .github/workflows/pages.yml content/news/x.md`
+used to read as a single allowed path while the workflow silently vanished.
 
 ### TOML tables swallow every key below them
 
@@ -108,7 +130,8 @@ git checkout -- go.mod go.sum
 | Pipeline tooling and its tests | `automation/scripts/` |
 | Deduplication state | `automation/state/seen.ndjson` |
 | Content format references | `automation/examples/` |
-| PR validation, auto-merge | `.github/workflows/validate-content.yml` |
+| PR validation (advisory; runs PR code) | `.github/workflows/validate-content.yml` |
+| Auto-merge — the trust boundary, runs from `main` | `.github/workflows/auto-merge.yml` |
 | Pipeline health canary | `.github/workflows/staleness.yml` |
 
 Do not add files to `themes/` — the theme is a Hugo module. The directory holds only `.gitkeep`.
@@ -147,4 +170,13 @@ assuming a param took effect — several plausible-looking PaperMod params are n
   files consistent — if the allowlist changes in one, it must change in the other and in
   `pathguard.py`.
 - Content frontmatter is **TOML** (`+++`), not YAML, so `validate.py` can parse it with stdlib
-  `tomllib` instead of a hand-rolled YAML parser.
+  `tomllib` instead of a hand-rolled YAML parser. The permitted key set is pinned in
+  `validate.py`'s `ALLOWED_KEYS`; PaperMod renders several other params (`cover.image`,
+  `canonicalURL`, `editPost.URL`) straight into HTML attributes, so adding one is a human decision.
+- `goldmark.renderer.unsafe = false` and `enableInlineShortcodes = false` in `config.toml` are
+  security settings, not style. Posts quote untrusted abstracts near-verbatim; `unsafe` would publish
+  any markup in that material, and an inline shortcode is arbitrary Go-template execution in the
+  build runner. `validate.py`'s `check_markup` rejects the same things independently.
+- Actions are pinned to full commit SHAs and the Hugo `.deb` is checksum-verified (`HUGO_SHA256`).
+  Bump `HUGO_VERSION` and `HUGO_SHA256` together, taking the hash from the release's own
+  `hugo_${HUGO_VERSION}_checksums.txt`.

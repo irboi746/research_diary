@@ -6,10 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Scoped per job, not here. The build job runs on pull_request, so it compiles
+# PR-supplied content and config; pages: write and id-token: write would let that
+# build mint a repo OIDC token and publish. Only deploy needs them.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Allow one concurrent deployment; don't cancel an in-progress one.
 concurrency:
@@ -18,23 +19,32 @@ concurrency:
 
 env:
   HUGO_VERSION: 0.166.0
+  # sha256 of hugo_extended_${HUGO_VERSION}_linux-amd64.deb, from the
+  # release's own hugo_${HUGO_VERSION}_checksums.txt. Bump both together.
+  HUGO_SHA256: 52b06555f739b1a08e04f5c31296e9bdf166a012e9b7e3137befc889dbc24db8
   THEME_URL: github.com/adityatelange/hugo-PaperMod
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # configure-pages reads the Pages settings to resolve base_url.
+      pages: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Go is required because the theme is a Hugo module, not a submodule.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
 
       - name: Install Hugo extended
         run: |
+          set -euo pipefail
           wget -O "${{ runner.temp }}/hugo.deb" \
             "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          echo "${HUGO_SHA256}  ${{ runner.temp }}/hugo.deb" | sha256sum -c -
           sudo dpkg -i "${{ runner.temp }}/hugo.deb"
 
       # Resolves the real Pages URL, including the /research_diary subpath.
@@ -42,7 +52,7 @@ jobs:
       - name: Configure Pages
         id: pages
         if: github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
       - name: Fetch theme
         run: hugo mod get -u "$THEME_URL"
@@ -50,7 +60,7 @@ jobs:
       - name: Build
         run: hugo --minify --baseURL "${{ steps.pages.outputs.base_url || 'http://localhost:1313' }}/"
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         if: github.ref == 'refs/heads/main'
         with:
           path: ./public
@@ -59,9 +69,13 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

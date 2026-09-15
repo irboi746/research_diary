@@ -37,6 +37,22 @@ RESEARCH_NAME = re.compile(r"\A\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md\Z")
 
 MAX_SLUG_LEN = 60
 
+# Every frontmatter key a generated post may set. Anything PaperMod would put
+# into an attribute -- cover.image, canonicalURL, editPost.URL -- is absent on
+# purpose; adding one is a human decision.
+ALLOWED_KEYS = {"title", "date", "type", "tags", "slug", "summary", "draft"}
+
+MARKUP_DENY = (
+    (re.compile(r"<\s*(script|iframe|object|embed|form|svg|style|base|link|meta)\b", re.I), "a raw HTML tag"),
+    (re.compile(r"<[a-zA-Z][^>]*\son[a-z]+\s*=", re.I), "an HTML event handler"),
+    (re.compile(r"javascript:", re.I), "a javascript: URL"),
+    (re.compile(r"data:text/html", re.I), "a data:text/html URL"),
+    # Hugo shortcodes. Inline shortcodes are disabled in config.toml, but a
+    # built-in one ({{< instagram >}}, {{< youtube >}}) still injects a
+    # third-party iframe into the page.
+    (re.compile(r"\{\{[<%]"), "a Hugo shortcode"),
+)
+
 
 class Problem(Exception):
     pass
@@ -126,6 +142,36 @@ def check_tags(meta: dict, vocab: set[str], errors: list[str]) -> None:
         )
 
 
+def check_markup(body: str, errors: list[str]) -> None:
+    """Reject raw markup and shortcodes in agent-authored prose.
+
+    config.toml sets goldmark unsafe = false, so raw HTML is escaped rather than
+    executed. This is the second half of that defence: it catches the material
+    before it is published, and it keeps holding if anyone flips unsafe back on.
+    Posts here quote untrusted abstracts near-verbatim, so a <script> or an
+    onerror= in a paper's own text is the realistic case, not a targeted attack.
+    """
+    for pattern, what in MARKUP_DENY:
+        m = pattern.search(body)
+        if m:
+            errors.append(f"body contains {what}: {m.group(0)[:60]!r}")
+
+
+def check_frontmatter_keys(meta: dict, errors: list[str]) -> None:
+    """Refuse unknown frontmatter keys.
+
+    PaperMod renders several params straight into src/href/<meta> attributes
+    (cover.image, canonicalURL, editPost.URL), so an unconstrained frontmatter is
+    an injection surface that never touches the body.
+    """
+    unknown = sorted(set(meta) - ALLOWED_KEYS)
+    if unknown:
+        errors.append(
+            f"unknown frontmatter key(s): {', '.join(unknown)}. "
+            f"Permitted: {', '.join(sorted(ALLOWED_KEYS))}"
+        )
+
+
 def check_body(section: str, body: str, errors: list[str]) -> None:
     if not body.strip():
         errors.append("body is empty")
@@ -144,7 +190,6 @@ def check_body(section: str, body: str, errors: list[str]) -> None:
 
 def validate_file(path: pathlib.Path, vocab: set[str]) -> list[str]:
     errors: list[str] = []
-    rel = path.relative_to(ROOT)
 
     section = None
     for name, directory in SECTIONS.items():
@@ -152,10 +197,20 @@ def validate_file(path: pathlib.Path, vocab: set[str]) -> list[str]:
             section = name
             break
     if section is None:
-        return [f"{rel}: not under content/news or content/research"]
+        # relative_to() would raise for a path outside the repo, so report the
+        # absolute path rather than crashing on the way to saying this.
+        return [f"{path}: not under content/news or content/research"]
+
+    rel = path.relative_to(ROOT)
 
     if path.name == "_index.md":
-        return []
+        # A section page is still a published page, so it gets the markup check.
+        # It gets nothing else: Hugo does not require frontmatter on _index.md,
+        # and the filename, date and tag rules are about posts. Scan the raw text
+        # rather than the split body, so a file with no frontmatter is still
+        # checked instead of being reported as malformed.
+        check_markup(path.read_text(encoding="utf-8"), errors)
+        return [f"{rel}: {e}" for e in errors]
 
     pattern = NEWS_NAME if section == "news" else RESEARCH_NAME
     if not pattern.match(path.name):
@@ -182,9 +237,11 @@ def validate_file(path: pathlib.Path, vocab: set[str]) -> list[str]:
         elif len(slug) > MAX_SLUG_LEN:
             errors.append(f"slug is longer than {MAX_SLUG_LEN} characters")
 
+    check_frontmatter_keys(meta, errors)
     check_date(meta, errors)
     check_tags(meta, vocab, errors)
     check_body(section, body, errors)
+    check_markup(body, errors)
 
     return [f"{rel}: {e}" for e in errors]
 
@@ -211,8 +268,9 @@ def main(argv: list[str] | None = None) -> int:
     all_errors: list[str] = []
     checked = 0
     for path in targets:
-        if path.name == "_index.md":
-            continue
+        # _index.md is not skipped: validate_file exempts it from the frontmatter
+        # and filename rules but still runs the markup check, because a section
+        # page is published like any other.
         checked += 1
         all_errors.extend(validate_file(path, vocab))
 

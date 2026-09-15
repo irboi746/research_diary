@@ -199,6 +199,51 @@ run(
     "body is empty",
 )
 
+# --- markup injection --------------------------------------------------------
+# Briefs quote untrusted abstracts near-verbatim, so this is the realistic path
+# for hostile markup: it arrives inside the source material, not hand-written.
+for name, payload, expect in (
+    ("script tag", "<script>alert(1)</script>", "a raw HTML tag"),
+    ("iframe", '<iframe src="https://evil.tld"></iframe>', "a raw HTML tag"),
+    ("svg", "<svg onload=alert(1)>", "a raw HTML tag"),
+    ("event handler", '<img src=x onerror="alert(1)">', "an HTML event handler"),
+    ("javascript URL", "[click](javascript:alert(1))", "a javascript: URL"),
+    ("data URL", "[click](data:text/html;base64,PHM+)", "a data:text/html URL"),
+    ("angle shortcode", "{{< instagram abc >}}", "a Hugo shortcode"),
+    ("percent shortcode", "{{% x %}}", "a Hugo shortcode"),
+):
+    run(
+        f"{name} in body is rejected",
+        "2026-09-15-daily-brief.md",
+        GOOD_NEWS.replace("- It does a thing.", f"- It does a thing. {payload}"),
+        expect,
+    )
+
+# Prose that merely mentions markup must still pass: a security diary writes
+# about <script> tags constantly, and fenced code is escaped, not executed.
+run(
+    "inline code mentioning a tag still passes",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace("- It does a thing.", "- Escapes `&lt;script&gt;` in output."),
+    None,
+)
+
+# --- frontmatter keys --------------------------------------------------------
+# PaperMod renders these straight into src/href attributes, so they are an
+# injection surface that never touches the body.
+run(
+    "unknown frontmatter key is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace("type = ", 'canonicalURL = "javascript:alert(1)"\ntype = '),
+    "unknown frontmatter key",
+)
+run(
+    "cover image is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace("type = ", 'cover = { image = "https://evil.tld/x.png" }\ntype = '),
+    "unknown frontmatter key",
+)
+
 # --- the shipped format examples must satisfy the contract they demonstrate ---
 # AGENTS.md points Jules at these files as the format reference. If they drift
 # from the validator, Jules copies a format that then fails in CI.

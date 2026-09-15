@@ -1,8 +1,17 @@
 name: Validate generated content
 
 # The pipeline's input is untrusted web content and its author is an agent with
-# write access, so this workflow is the trust boundary. It runs on the pull
-# request Jules opens, and nothing merges without passing it.
+# write access. This workflow runs on the pull request Jules opens and gives fast
+# feedback on it.
+#
+# It is NOT the trust boundary, and must not be treated as one. For a same-repo
+# branch, `on: pull_request` runs the copy of this file from the PR head, along
+# with the PR's copy of pathguard.py -- so a pull request supplies both the rules
+# and the code that checks them, and can make this workflow say whatever it likes.
+#
+# The decision to merge therefore lives in auto-merge.yml, which `on: workflow_run`
+# always runs from the default branch, and which re-runs the guard from main
+# against this PR's diff. A green tick here means nothing on its own.
 
 on:
   pull_request:
@@ -18,22 +27,30 @@ concurrency:
 
 env:
   HUGO_VERSION: 0.166.0
+  # sha256 of hugo_extended_${HUGO_VERSION}_linux-amd64.deb, from the
+  # release's own hugo_${HUGO_VERSION}_checksums.txt. Bump both together.
+  HUGO_SHA256: 52b06555f739b1a08e04f5c31296e9bdf166a012e9b7e3137befc889dbc24db8
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    # Branch names may contain $, backticks and semicolons, so github.base_ref
+    # goes through env rather than being pasted into a run: body. It is pinned to
+    # main by the branches: filter today; this keeps it safe if that widens.
+    env:
+      BASE_REF: ${{ github.base_ref }}
     outputs:
       clean: ${{ steps.verdict.outputs.clean }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
-      # The allowlist check comes first: if the diff touches a workflow or the
-      # scripts, nothing else it says can be trusted.
+      # Advisory only -- this is the PR's own copy of the guard. auto-merge.yml
+      # re-runs it from main, and that is the run that decides anything.
       - name: Path allowlist
         run: |
-          python3 automation/scripts/pathguard.py --base "origin/${{ github.base_ref }}"
+          python3 automation/scripts/pathguard.py --base "origin/$BASE_REF"
 
       - name: Script self-tests
         run: |
@@ -45,14 +62,16 @@ jobs:
       - name: Content schema
         run: python3 automation/scripts/validate.py
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
 
       - name: Install Hugo extended
         run: |
+          set -euo pipefail
           wget -q -O "${{ runner.temp }}/hugo.deb" \
             "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          echo "${HUGO_SHA256}  ${{ runner.temp }}/hugo.deb" | sha256sum -c -
           sudo dpkg -i "${{ runner.temp }}/hugo.deb"
 
       - name: Fetch theme
@@ -66,8 +85,9 @@ jobs:
           hugo --minify --baseURL "https://irboi746.github.io/research_diary/" -d ./public
 
           missing=0
-          for f in $(git diff --name-only "origin/${{ github.base_ref }}...HEAD" \
-                     -- 'content/news/*.md' 'content/research/*.md'); do
+          # NUL-delimited: an unquoted $(...) in a for loop word-splits and glob-
+          # expands, so a filename with a space became two bogus iterations.
+          while IFS= read -r -d '' f; do
             [ "$(basename "$f")" = "_index.md" ] && continue
             [ -f "$f" ] || continue
 
@@ -82,7 +102,8 @@ jobs:
               echo "MISSING $f -> expected public/$section/$slug/index.html"
               missing=$((missing + 1))
             fi
-          done
+          done < <(git diff --name-only -z "origin/$BASE_REF...HEAD" \
+                     -- 'content/news/*.md' 'content/research/*.md')
 
           if [ "$missing" -gt 0 ]; then
             echo
@@ -95,36 +116,14 @@ jobs:
         run: |
           hugo --minify --baseURL "https://irboi746.github.io/research_diary/" -d ./public2 2>&1 \
             | tee build.log
-          if grep -Eiq '^ERROR' build.log; then
-            echo "Hugo reported errors:"
-            grep -Ei '^ERROR' build.log
+          if grep -Eiq '^(WARN|ERROR)' build.log; then
+            echo "Hugo reported warnings or errors:"
+            grep -Ei '^(WARN|ERROR)' build.log
             exit 1
           fi
 
       - id: verdict
         run: echo "clean=true" >> "$GITHUB_OUTPUT"
 
-  merge:
-    needs: validate
-    if: >-
-      github.event_name == 'pull_request' &&
-      needs.validate.outputs.clean == 'true' &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: write
-    steps:
-      - name: Merge the pull request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge --squash --delete-branch "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"
-
-      # A merge made with GITHUB_TOKEN does not raise a push event, so pages.yml
-      # would never fire and the site would quietly stop updating. workflow_dispatch
-      # is exempt from that rule, so trigger the deploy explicitly.
-      - name: Trigger the Pages deploy
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run pages.yml --ref main --repo "${{ github.repository }}"
+# The merge job that used to live here has moved to auto-merge.yml. It cannot run
+# from this file: everything here is supplied by the pull request being judged.
