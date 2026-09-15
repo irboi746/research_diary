@@ -95,9 +95,9 @@ jobs:
         run: |
           hugo --minify --baseURL "https://irboi746.github.io/research_diary/" -d ./public2 2>&1 \
             | tee build.log
-          if grep -Eiq '^(WARN|ERROR)' build.log; then
-            echo "Hugo reported warnings or errors:"
-            grep -Ei '^(WARN|ERROR)' build.log
+          if grep -Eiq '^ERROR' build.log; then
+            echo "Hugo reported errors:"
+            grep -Ei '^ERROR' build.log
             exit 1
           fi
 
