@@ -32,7 +32,7 @@ PAPER = "https://www.usenix.org/conference/usenixsecurity25/presentation/mu"
 GOOD_NEWS = f'''+++
 title = "Conference Brief"
 date = {PAST}
-type = "news"
+type = "conferences"
 tags = ["cs.CR", "fuzzing"]
 summary = "One talk on desynchronisation."
 +++
@@ -74,7 +74,7 @@ Source: {PAPER}
 GOOD_RESEARCH = f'''+++
 title = "Fuzzing"
 date = {PAST}
-type = "research"
+type = "deep-dives"
 tags = ["fuzzing"]
 slug = "fuzzing-state-of-the-art"
 +++
@@ -96,9 +96,9 @@ Where it is going.
 def infer_section(filename: str) -> str:
     if "arxiv-brief" in filename:
         return "arxiv"
-    if "daily-brief" in filename or "news" in filename:
-        return "news"
-    return "research"
+    if "daily-brief" in filename or "conferences" in filename:
+        return "conferences"
+    return "deep-dives"
 
 
 def run(name: str, filename: str, body: str, expect: str | None, section: str | None = None) -> None:
@@ -151,7 +151,7 @@ run(
 run(
     "wrong type for content/arxiv is rejected",
     "2026-09-15-arxiv-brief.md",
-    GOOD_ARXIV.replace('type = "arxiv"', 'type = "news"'),
+    GOOD_ARXIV.replace('type = "arxiv"', 'type = "conferences"'),
     "type must be 'arxiv'",
 )
 
@@ -223,8 +223,8 @@ run(
 run(
     "wrong type for the directory is rejected",
     "2026-09-15-daily-brief.md",
-    GOOD_NEWS.replace('type = "news"', 'type = "research"'),
-    "type must be 'news'",
+    GOOD_NEWS.replace('type = "conferences"', 'type = "deep-dives"'),
+    "type must be 'conferences'",
 )
 run(
     "missing title is reported",
@@ -435,8 +435,8 @@ run(
 EXAMPLES = pathlib.Path(__file__).resolve().parents[1] / "examples"
 for example, target_name in (
     ("arxiv-example.md", "2026-09-10-arxiv-brief.md"),
-    ("news-example.md", "2026-09-10-daily-brief.md"),
-    ("research-example.md", "2026-09-10-directed-fuzzing.md"),
+    ("conferences-example.md", "2026-09-10-daily-brief.md"),
+    ("deep-dives-example.md", "2026-09-10-directed-fuzzing.md"),
 ):
     src = EXAMPLES / example
     if not src.exists():

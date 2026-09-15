@@ -7,3 +7,6 @@ resources/
 # Python
 __pycache__/
 *.pyc
+
+# Local dependency target for `pip install --target .pylibs` (see README).
+.pylibs/

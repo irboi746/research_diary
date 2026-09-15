@@ -7,7 +7,8 @@ deep dives. Content is researched and written by [Google Jules](https://jules.go
 [Hugo](https://gohugo.io) and [PaperMod](https://github.com/adityatelange/hugo-PaperMod), and
 published to [GitHub Pages](https://docs.github.com/en/pages).
 
-Sources: arXiv, USENIX, DEF CON, Black Hat, Off-by-One — plus open web search, so the diary is not
+Sources: arXiv, USENIX Security, USENIX WOOT, IEEE S&P, NDSS, ACM CCS, DEF CON, Black Hat and
+[un]prompted — plus open web search, so the diary is not
 limited to those.
 
 ## How it works
@@ -29,7 +30,7 @@ repository carries the specification Jules reads (`AGENTS.md`), the tooling it r
 |---|---|
 | Jules console | Repo connection, Initial Setup, the daily scheduled task, manual deep dives |
 | This repo | `AGENTS.md`, research scope, helper scripts, dedup state, Hugo layout |
-| GitHub Actions | PR validation, auto-merge, deploy, staleness canary |
+| GitHub Actions | PR validation, auto-merge, deploy |
 
 ## Quick start
 
@@ -48,11 +49,22 @@ repository carries the specification Jules reads (`AGENTS.md`), the tooling it r
    hugo server
    ```
 
-1. Run the pipeline's own tests — no dependencies needed:
+1. Run the pipeline's own tests. They need no dependencies — the tests covering `fulltext.py`'s
+   HTML and PDF extraction skip themselves when the packages are absent, and report that they did:
 
    ```shell
    for t in automation/scripts/test_*.py; do python3 "$t" || break; done
    ```
+
+   To run those skipped checks too, install the ingestion dependencies. A virtualenv is the usual
+   way; on a PEP 668 system without `python3-venv` available, install to a directory instead:
+
+   ```shell
+   python3 -m pip install --target .pylibs -r requirements.txt
+   PYTHONPATH=.pylibs python3 automation/scripts/test_fulltext.py
+   ```
+
+   `.pylibs/` is gitignored.
 
 No local Hugo install? Use a Docker image (CI pins its own Hugo version, so this approximates CI
 rather than matching it exactly):
@@ -85,9 +97,37 @@ Short version:
 ### One-time setup in the Jules console
 
 1. Connect `irboi746/research_diary` (installs the Jules GitHub App).
-2. Leave **Initial Setup** empty. Python 3.12 is preinstalled in the Jules VM and every script here
-   is stdlib-only, so there is nothing to install.
+2. Configure the environment and snapshot it — see below. `fulltext.py` needs three packages;
+   without them every paper falls back to abstract-only.
 3. Create the scheduled task — but only after a manual run has produced output you trust.
+
+### Jules console environment
+
+**Jules → Configure repo → Environment → run and snapshot.**
+
+Python 3.12 is preinstalled. Most of the tooling is stdlib, but the ingestion tools need three
+packages, so the environment setup script is:
+
+```shell
+pip install -r requirements.txt
+```
+
+Run it, and once it succeeds **take the snapshot**. Jules reuses that snapshot for every later task
+started from this repository, so the install cost is paid once instead of on every run — which
+matters here, because the arXiv brief runs daily.
+
+Three things worth knowing, because each one fails quietly:
+
+- **Re-run and re-snapshot whenever `requirements.txt` changes.** A stale snapshot keeps the old
+  packages, and the failure looks like a content problem rather than an environment one:
+  `fulltext.py` cannot import `bs4`, falls back to the abstract, and the brief is thinner than it
+  should be. `AGENTS.md` tells Jules to report an import failure rather than work around it.
+- **This replaces the old "leave Initial Setup empty" instruction.** That was true while everything
+  was stdlib-only; it is not any more.
+- **CI installs none of this.** The checks that gate a merge — `pathguard.py`, `validate.py`,
+  `postparse.py`, `linkcheck.py` — are deliberately stdlib-only, so no third-party package sits
+  between an untrusted pull request and a write token. A broken snapshot therefore shows up as a
+  failed Jules run, never as a bad merge.
 
 ### The console prompts
 
@@ -115,11 +155,12 @@ Run the deep research pipeline as specified in AGENTS.md. Topic: <your topic>
 The pipeline names must match the headings in `AGENTS.md` exactly — with a one-line prompt, those
 words are the only thing selecting which procedure runs.
 
-Weekly for the conference brief because all five tier-2 sources are `window = "unseen"` with
+Weekly for the conference brief because every tier-2 source is `window = "unseen"` with
 `check = "weekly"`: they publish in one annual burst and then drain, so a daily run would find
 nothing most days. That is a valid outcome — it opens no pull request — but it spends a Jules run to
-discover it. If you do move it to daily, raise `max_conference_age_days` in `staleness.yml` to match,
-or the canary will file an issue about a feed that is behaving correctly.
+discover it. The backlog queue is what makes the burst manageable: a programme is enqueued once and
+`queue.py` hands out eight papers per run, so a 200-paper conference becomes a couple of dozen
+ordinary weekly briefs instead of one unusable post.
 
 They are one line on purpose. Everything else lives in `AGENTS.md` and `automation/config/topics.toml`,
 where it is reviewable and diffable — and because a Jules scheduled task **cannot be edited** once
@@ -130,8 +171,8 @@ pull request, not a UI round trip.
 
 `validate-content.yml` runs on every pull request Jules opens:
 
-1. **Path guard** — the diff may only touch `content/arxiv/**`, `content/news/**`,
-   `content/research/**` and `automation/state/**`. The pipeline's input is untrusted web content
+1. **Path guard** — the diff may only touch `content/arxiv/**`, `content/conferences/**`,
+   `content/deep-dives/**` and `automation/state/**`. The pipeline's input is untrusted web content
    fed to an agent with repo write access, so this is the boundary that stops a poisoned paper from
    editing a workflow.
 2. **Schema** — TOML frontmatter, RFC3339 UTC date, tags from the controlled vocabulary, required
@@ -154,10 +195,19 @@ link. Ten of those 33 turned out not to support what they were attached to.
 
 ### Health
 
-Nothing in this repo observes the pipeline, so a deleted scheduled task looks exactly like a quiet
-week. `staleness.yml` runs weekly and opens an issue if either feed has gone quiet: three days for
-arXiv, which runs daily against a 48-hour window, and fourteen for conference briefs, which
-legitimately go silent between conference seasons. It is the only monitoring in the system.
+**There is no monitoring.** A weekly `staleness.yml` canary used to open an issue when a feed went
+quiet; it was removed to cut workflow noise. Nothing in this repo observes the pipeline, so a
+deleted scheduled task, a revoked repo connection, a stale environment snapshot and a genuinely
+quiet week all look identical from here: no new posts.
+
+Check by hand, in rough order of likelihood, if briefs stop appearing:
+
+- the scheduled tasks in the Jules console — are they still there, and when did each last run?
+- the repository connection and the Jules GitHub App installation;
+- any open pull request from Jules sitting unmerged because validation failed;
+- `queue.py stats` — pending items with no briefs being written means runs are failing, not that
+  there is nothing to cover;
+- whether `automation/config/topics.toml` has been narrowed until it matches nothing.
 
 ## Deployment
 

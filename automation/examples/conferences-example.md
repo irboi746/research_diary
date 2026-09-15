@@ -1,7 +1,7 @@
 +++
 title = "Conference Brief — 2026-09-10"
 date = 2026-09-10T06:00:00Z
-type = "news"
+type = "conferences"
 tags = ["exploitation", "protocol-analysis", "fuzzing", "usenix"]
 summary = "An app-agnostic route from arbitrary file overwrite to code execution on Android, and the first cross-platform look at AirDrop and Quick Share."
 +++

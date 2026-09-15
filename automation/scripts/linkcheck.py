@@ -246,7 +246,7 @@ def check_file(path: pathlib.Path) -> list[Finding]:
 def changed_files(base: str, head: str = "HEAD") -> list[pathlib.Path]:
     out = subprocess.run(
         ["git", "diff", "--name-only", "--diff-filter=d", f"{base}...{head}", "--",
-         "content/arxiv", "content/news", "content/research"],
+         "content/arxiv", "content/conferences", "content/deep-dives"],
         capture_output=True, text=True, cwd=ROOT,
     )
     if out.returncode != 0:

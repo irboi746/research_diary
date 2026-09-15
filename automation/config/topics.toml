@@ -1,23 +1,36 @@
 #
 # Research scope for the automated pipelines.
 #
-# TOML rather than YAML so the scripts can parse it with stdlib `tomllib` — no
-# pip install, which keeps the Jules console's Initial Setup empty.
+# TOML rather than YAML so the scripts can parse it with stdlib `tomllib`. The
+# checkers that run on the merge path (pathguard, validate, postparse, linkcheck)
+# stay stdlib-only for that reason; only the ingestion tools take dependencies,
+# which the Jules VM installs once from requirements.txt and snapshots. See the
+# "Jules console environment" section of README.md.
 #
-# Read by: automation/scripts/{arxiv,sources,validate}.py
+# Read by: automation/scripts/{arxiv,sources,validate,rank}.py
 # Described to Jules by: AGENTS.md
 #
 
 # Drives relevance ranking and rejection. Be concrete — this is the real filter,
 # far more than the source list is.
 interests = [
-  "binary exploitation, memory safety, and mitigation bypasses",
-  "fuzzing and automated vulnerability discovery",
-  "reverse engineering and binary analysis tooling",
-  "supply-chain security, including ML model and package ecosystems",
-  "side-channel and microarchitectural attacks",
-  "applied cryptography failures in deployed systems",
-  "security of LLM-based systems and agents",
+  "memory-safety vulnerability classes and modern exploitation technique",
+  "bypasses of deployed mitigations: CFI, ASLR, sandboxes, hypervisors, secure boot, pointer authentication",
+  "fuzzing, symbolic execution, and automated vulnerability discovery",
+  "reverse engineering, binary analysis, and decompilation tooling",
+  "kernel, firmware, baseband, and embedded exploitation",
+  "side-channel and microarchitectural attacks with a demonstrated primitive",
+  "applied cryptography breaks in deployed protocols and implementations",
+  "supply-chain attacks on package, build, and model-distribution ecosystems",
+  "server-side web attacks: HTTP request smuggling and desync, parser and normalisation discrepancies between proxies, CDNs and origins, cache poisoning and cache deception, WebSocket upgrade smuggling and cross-site WebSocket hijacking, SSRF, deserialisation and template injection, authentication, session and SSO flaws",
+  "web server, reverse-proxy and framework misconfiguration classes that yield server-side compromise — routing, path normalisation, header handling, inherited and default config — where the finding generalises across deployments rather than naming one site",
+  "browser and client runtime exploitation: renderer and JIT bugs, same-origin and site-isolation bypass, extension and IPC attack surface; WebAssembly security in browsers and in standalone runtimes (wasmtime, WAMR, WASI) — runtime and JIT escape, memory-model bugs, and WASM used to carry or obfuscate payloads",
+  "mobile: Android and iOS privilege escalation, sandbox and entitlement bypass, TEE and secure-enclave attacks, app and SDK reverse engineering",
+  "cloud and multi-tenant infrastructure: container and hypervisor escape, IAM and federation flaw classes, metadata-service and workload-identity abuse, isolation failures between tenants",
+  "LLMs and agents doing offensive work: vulnerability discovery, exploit and PoC generation, patch diffing, reverse engineering, fuzzing harness synthesis",
+  "measured capability results for automated offence — CTF, CVE reproduction, pwn benchmarks — where the methodology and failure cases are reported, not just a score",
+  "attacks on LLM-based systems and agents: prompt injection, tool and agent hijacking, sandbox escape from code interpreters, memory and RAG poisoning",
+  "attacks on the ML stack itself: inference-server and framework vulnerabilities, unsafe deserialisation in model formats, model and training-data extraction",
 ]
 
 # ---------------------------------------------------------------------------
@@ -31,6 +44,8 @@ tags = [
   "cs.CR", "cs.AI", "cs.SE", "cs.LG", "cs.NI", "cs.OS", "cs.PL",
   # topics
   "binary-analysis",
+  "browser",
+  "cloud",
   "cryptography",
   "exploitation",
   "firmware",
@@ -41,6 +56,7 @@ tags = [
   "malware",
   "memory-safety",
   "mitigations",
+  "mobile",
   "network-security",
   "privacy",
   "protocol-analysis",
@@ -49,22 +65,46 @@ tags = [
   "supply-chain",
   "tooling",
   "vulnerability-discovery",
+  "wasm",
   "web-security",
   # venues
-  "arxiv", "usenix", "defcon", "blackhat", "off-by-one",
+  "arxiv", "usenix", "defcon", "blackhat", "ieee-sp", "ndss", "ccs", "unprompted",
+  # Retained for already-published posts even though it is no longer a source.
+  "off-by-one",
 ]
 
-# Papers whose sole contribution is a product pitch. Jules rejects on these.
+# Reasons to drop an item outright, whatever its score. Jules rejects on these.
 reject = [
   "withdrawn or superseded by a newer version already covered",
   "vendor marketing whitepaper whose conclusion is a product",
   "no technical detail beyond an abstract or press release",
   "already covered under a different URL or venue",
+  "defence, detection or mitigation design with no new attack result",
+  "benchmark or leaderboard score with no methodology or failure analysis",
+  "a single site's or single app's finding with no generalisable class behind it",
+  "posture scanning, configuration survey or compliance measurement with no demonstrated impact",
 ]
 
 # How many items get a full write-up in a daily brief. The rest go to the
-# overflow link roll — still recorded as seen, so they do not resurface.
+# overflow link roll — still recorded as seen, so they do not resurface. This is
+# also the batch size queue.py hands out, so a conference backlog drains in runs
+# of this many rather than arriving as one enormous post.
 brief_max_summarized = 8
+
+# Index pages of venues that are no longer compulsory sources.
+#
+# Must stay above the first [table] header, or TOML scopes it into that table.
+#
+# index_urls() is built from the url_templates above, so removing a source used
+# to silently drop its index page out of the "never cite an index page for a
+# specific work" blocklist. That blocklist exists because a published deep dive
+# attached five invented talk titles to bare conference index URLs copied
+# straight out of this file; it must only ever grow. Retiring a source is not a
+# reason to start trusting its landing page as a citation.
+retired_index_urls = [
+  "https://offbyone.sg/",
+]
+
 
 # ---------------------------------------------------------------------------
 # Compulsory sources. Every daily run must cover all of these.
@@ -74,9 +114,19 @@ brief_max_summarized = 8
 
 [[sources]]
 name = "arXiv"
-retrieval = "api"
+# RSS, not the Atom API: export.arxiv.org rate-limits hard and answers a burst of
+# queries with HTTP 429. rss.arxiv.org serves the same day's announcements as one
+# cheap document per category, so a daily run makes one request per category.
+# `retrieval = "api"` still works (arxiv.py --api) and is the only way to ask for
+# a historical window, since a feed is only ever "today".
+retrieval = "rss"
 categories = ["cs.CR", "cs.AI", "cs.SE"]
+feed_url = "https://rss.arxiv.org/rss/{category}"
 window = "48h"
+# Feed items carry an announce_type: new, cross, replace or replace-cross. The
+# replace* pair is a new version of something already announced, which is the
+# `reject` rule about superseded work, so only these two are considered.
+announce_types = ["new", "cross"]
 
 [[sources]]
 name = "USENIX Security"
@@ -95,6 +145,27 @@ check = "weekly"
 url_templates = ["https://www.usenix.org/conference/woot{yy}/technical-sessions"]
 
 [[sources]]
+name = "IEEE Symposium on Security and Privacy"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = ["https://www.ieee-security.org/TC/SP{yyyy}/"]
+
+[[sources]]
+name = "NDSS"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = ["https://www.ndss-symposium.org/ndss{yyyy}/accepted-papers/"]
+
+[[sources]]
+name = "ACM CCS"
+retrieval = "urls"
+window = "unseen"
+check = "weekly"
+url_templates = ["https://www.sigsac.org/ccs/CCS{yyyy}/"]
+
+[[sources]]
 name = "DEF CON"
 retrieval = "urls"
 window = "unseen"
@@ -111,12 +182,14 @@ window = "unseen"
 check = "weekly"
 url_templates = ["https://www.blackhat.com/us-{yy}/briefings/schedule/"]
 
+# No year placeholder: a single standing page, which sources.py emits once
+# rather than once per year.
 [[sources]]
-name = "Off-by-One"
+name = "[un]prompted"
 retrieval = "urls"
 window = "unseen"
 check = "weekly"
-url_templates = ["https://offbyone.sg/"]
+url_templates = ["https://www.unprompted.au/schedule"]
 
 # ---------------------------------------------------------------------------
 # Tier 3. The compulsory sources are a floor, not a ceiling.
@@ -127,7 +200,8 @@ enabled = true
 guidance = """
 Search beyond the compulsory sources for work matching `interests`: security
 research blogs, vendor and CERT advisories, protocol and implementation
-documentation, IACR eprint, NDSS/CCS/Oakland, and regional conferences. Anything
-technical and verifiable is in scope.
+documentation, IACR eprint, and regional conferences. Anything technical and
+verifiable is in scope. NDSS, CCS and Oakland used to be listed here; they are
+compulsory sources now, so discovery means looking past them.
 """
 

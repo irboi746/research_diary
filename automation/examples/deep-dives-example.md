@@ -1,7 +1,7 @@
 +++
 title = "Directed Fuzzing: State of the Art"
 date = 2026-09-10T06:00:00Z
-type = "research"
+type = "deep-dives"
 tags = ["fuzzing", "vulnerability-discovery", "tooling"]
 slug = "directed-fuzzing-state-of-the-art"
 +++

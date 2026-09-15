@@ -17,20 +17,21 @@ The prompt names one of these. Run only that one.
 
 ### 1. arXiv brief — `content/arxiv/YYYY-MM-DD-arxiv-brief.md`
 
-Preprints posted in the last 48 hours, from the arXiv API. Runs daily.
+Preprints announced today, from the arXiv RSS feeds. Runs daily.
 
-### 2. Conference brief — `content/news/YYYY-MM-DD-daily-brief.md`
+### 2. Conference brief — `content/conferences/YYYY-MM-DD-daily-brief.md`
 
 New conference proceedings and other work found on the web. Runs on its own schedule, and on many
 runs there will be nothing new — see the empty-run rule.
 
-### 3. Deep dive — `content/research/YYYY-MM-DD-{topic-slug}.md`
+### 3. Deep dive — `content/deep-dives/YYYY-MM-DD-{topic-slug}.md`
 
 A long-form synthesis of one topic, given to you in the prompt. Runs on request.
 
 The two briefs share a format and differ only in where their material comes from. The split exists
-because arXiv is a reproducible API query over a fixed window, while the conference venues are pages
-you read on an "unseen" basis and publish in one annual burst.
+because arXiv is a daily feed read in full, while the conference venues are pages you read on an
+"unseen" basis and that publish in one annual burst — which is why the conference brief drains a
+backlog a batch at a time rather than covering a whole programme at once.
 
 ---
 
@@ -41,8 +42,8 @@ yourself before you finish saves a round trip.
 
 1. **Only ever modify these paths:**
    - `content/arxiv/**` — Markdown only (`*.md`)
-   - `content/news/**` — Markdown only (`*.md`)
-   - `content/research/**` — Markdown only (`*.md`)
+   - `content/conferences/**` — Markdown only (`*.md`)
+   - `content/deep-dives/**` — Markdown only (`*.md`)
    - `automation/state/**`
 
    Never modify workflows, `config.toml`, `go.mod`, the scripts under `automation/scripts/`, or this
@@ -94,16 +95,34 @@ yourself before you finish saves a round trip.
 
 ## Tools in this repo
 
-Python 3.12 is preinstalled; these need no setup. Run them from the repository root.
+Python 3.12 is preinstalled. `beautifulsoup4`, `html2text` and `pypdf` are installed in the
+environment snapshot for this repository (see `requirements.txt`); `fulltext.py` needs them and
+everything else is stdlib. If an import fails, the snapshot is stale — say so in your final message
+rather than installing anything yourself. Run these from the repository root.
 
 ```sh
-# Tier 1 — arXiv, via its API. Complete and reproducible for the window given.
-python3 automation/scripts/arxiv.py --since 48h
-python3 automation/scripts/arxiv.py --since 48h --json      # full metadata incl. abstracts
+# Tier 1 — arXiv, via the RSS feeds. One request per category, no rate limiting.
+python3 automation/scripts/arxiv.py                          # today's announcements
+python3 automation/scripts/arxiv.py --json                   # full metadata incl. abstracts
+python3 automation/scripts/arxiv.py --api --since 48h        # only to backfill a missed day
+
+# Rank what came back against `interests` / `reject`. Advisory ordering, not a verdict:
+# it is term overlap, it drops nothing, and you still decide.
+python3 automation/scripts/arxiv.py --json | python3 automation/scripts/rank.py --top 20
+
+# Full text of one paper: HTML first, PDF if there is none, abstract if neither.
+# Check the reported source — only "html" or "pdf" means you actually read the paper.
+python3 automation/scripts/fulltext.py <arxiv-id> --json
 
 # Tier 2 — the conference pages worth reading. This prints URLs; you read them.
 python3 automation/scripts/sources.py urls
 python3 automation/scripts/sources.py urls --source "DEF CON"
+
+# The conference backlog. Enqueue a programme once, then drain it 8 at a time.
+python3 automation/scripts/queue.py enqueue <url> --title "..." --venue "USENIX WOOT"
+python3 automation/scripts/queue.py next --limit 8           # the batch for this run
+python3 automation/scripts/queue.py done <url> [<url> ...]   # after writing them up
+python3 automation/scripts/queue.py stats
 
 # Deduplication. Use `check` before summarising anything, `record` after.
 python3 automation/scripts/idstate.py check  <url-or-id>    # exit 0 = new, 1 = already covered
@@ -127,17 +146,23 @@ finding a bad link there costs a round trip.
 ## Retrieval: a floor, not a ceiling
 
 The sources in `topics.toml` are **compulsory for the pipeline they belong to** — the arXiv brief
-covers the `retrieval = "api"` source, the conference brief covers the `retrieval = "urls"` sources.
+covers the `retrieval = "rss"` source, the conference brief covers the `retrieval = "urls"` sources
+(USENIX Security, USENIX WOOT, IEEE S&P, NDSS, ACM CCS, DEF CON, Black Hat and [un]prompted).
 They are not the limit. After covering them, the conference brief should also search the web for
 anything else matching the `interests` list: security research blogs, vendor and CERT advisories,
 protocol and implementation documentation, IACR eprint, other conferences.
 
 Per-source keys in `topics.toml`:
 
-- `window = "48h"` — only work published in the last 48 hours.
+- `window = "48h"` — only recent work. On the RSS path this is the day's announcement list; the
+  key still matters for `--api --since` when backfilling.
+- `announce_types = ["new", "cross"]` — which arXiv announcement kinds count. `replace` and
+  `replace-cross` are new versions of work already announced, which is the `reject` rule about
+  superseded material, so they are excluded by default.
 - `window = "unseen"` — anything not already in the dedup state, regardless of age. Conference
   venues publish in one annual burst, so this lets them drain into briefs over following weeks
-  rather than being missed for eleven months and then flooding.
+  rather than being missed for eleven months and then flooding. The backlog queue is what makes
+  that draining orderly: enqueue the programme once, take eight per run.
 - `check = "weekly"` — how often the source is worth revisiting. A source marked weekly that you
   covered in the last few days can be skipped; say so in your final message.
 
@@ -148,27 +173,41 @@ Per-source keys in `topics.toml`:
 This applies to both the arXiv brief and the conference brief. The only difference is step 2.
 
 1. If today's file already exists — `content/arxiv/<today>-arxiv-brief.md` or
-   `content/news/<today>-daily-brief.md` — **update it in place**. Do not create a second file for
+   `content/conferences/<today>-daily-brief.md` — **update it in place**. Do not create a second file for
    the same day.
 2. Gather candidates.
-   - *arXiv brief*: `arxiv.py --since 48h --json`.
-   - *Conference brief*: the pages from `sources.py urls`, then open web search.
+   - *arXiv brief*: `arxiv.py --json`. This is today's announcements; `--api --since` exists only
+     for backfilling a day that was missed.
+   - *Conference brief*: first `queue.py next --limit 8`. If that returns items, **they are this
+     run's material** — a venue's programme is drained a batch at a time, not all at once. If the
+     queue is empty, read the pages from `sources.py urls`, `queue.py enqueue` everything new you
+     find there, and then take the first batch. Open web search fills any remainder.
 3. For each candidate, run `idstate.py check`. Skip anything it reports as seen.
-4. Reject anything matching the `reject` list in `topics.toml`.
-5. Rank what remains against `interests`. `brief_max_summarized` in `topics.toml` is a **ceiling on
-   how many get a full write-up, not a target** — if only three items are worth writing up, write up
-   three. Everything else goes in an **Also published** list with title, venue and link.
-6. `idstate.py record` **every** item you kept — both the written-up ones and the Also-published
-   ones. Skipping the overflow items makes them resurface as new tomorrow.
-7. Run `validate.py` and `linkcheck.py --changed`. Fix anything they report.
+4. Reject anything matching the `reject` list in `topics.toml`. Two of those rules are already
+   enforced for you — superseded versions by `arxiv.py`'s announce-type filter, and re-coverage by
+   `idstate.py` — the rest are your judgement.
+5. Rank what remains against `interests`; `rank.py` will order them for you. Its score is term
+   overlap, so treat it as triage and not a verdict: it cannot tell a real result from a paper that
+   merely uses the words, and a `flagged` item is a hint to look closer, not a rejection.
+   `brief_max_summarized` in `topics.toml` is a **ceiling on how many get a full write-up, not a
+   target** — if only three items are worth writing up, write up three. Everything else goes in an
+   **Also published** list with title, venue and link.
+6. Read what you write about. `fulltext.py <id>` returns the body; check its reported `source`. If
+   it is `abstract`, you did not read the paper — say so with the
+   `*Abstract only — full text not retrieved.*` marker rather than implying otherwise.
+7. `idstate.py record` **every** item you kept — both the written-up ones and the Also-published
+   ones. Skipping the overflow items makes them resurface as new tomorrow. For conference items,
+   also `queue.py done` each one, or the next run hands you the same batch.
+8. Run `validate.py` and `linkcheck.py --changed`. Fix anything they report.
 
 **If nothing qualifies, make no changes and open no pull request.** Say so in your final message. A
 quiet run is a valid outcome; an empty post is not. This is routine for the conference brief, whose
-sources publish in bursts.
+sources publish in bursts — though while `queue.py stats` still shows pending items for a venue,
+there is material waiting and a quiet run means something went wrong.
 
 ### Format
 
-See `automation/examples/arxiv-example.md` and `automation/examples/news-example.md` for complete
+See `automation/examples/arxiv-example.md` and `automation/examples/conferences-example.md` for complete
 worked examples. Both are checked by the test suite, so they always match the current contract.
 
 ```toml
@@ -181,7 +220,8 @@ summary = "A one-sentence description of the day, shown on the section list page
 +++
 ```
 
-`type` is `"arxiv"` in `content/arxiv/` and `"news"` in `content/news/`; the title follows
+`type` is `"arxiv"` in `content/arxiv/` and `"conferences"` in `content/conferences/`; it always
+matches the directory name, and the validator rejects a mismatch. The title follows
 ("arXiv Brief — " or "Conference Brief — ").
 
 The body opens with `## In brief`: two to four bullets on what the day's items amount to — a theme
@@ -224,7 +264,7 @@ Reference lines carry authors, title, venue, year, arXiv ID or DOI where one exi
 
 ### Format
 
-See `automation/examples/research-example.md`. Required sections, in order:
+See `automation/examples/deep-dives-example.md`. Required sections, in order:
 
 ```
 ## Background        what problem this area exists to solve, and how it got here

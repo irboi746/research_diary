@@ -30,14 +30,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "automation" / "config" / "topics.toml"
 SECTIONS = {
     "arxiv": ROOT / "content" / "arxiv",
-    "news": ROOT / "content" / "news",
-    "research": ROOT / "content" / "research",
+    "conferences": ROOT / "content" / "conferences",
+    "deep-dives": ROOT / "content" / "deep-dives",
 }
 
 # The two brief sections. They share every rule; they are split because arXiv is
-# an API query over a 48h window and the conference venues are pages read on an
+# an RSS feed read daily and the conference venues are pages read on an
 # "unseen" window, which are different cadences, not different formats.
-BRIEFS = ("arxiv", "news")
+BRIEFS = ("arxiv", "conferences")
 
 FM = re.compile(r"\A\+\+\+\s*\n(.*?)\n\+\+\+\s*\n(.*)\Z", re.DOTALL)
 SLUG = re.compile(r"\A[a-z0-9]+(?:-[a-z0-9]+)*\Z")
@@ -49,8 +49,11 @@ URL = re.compile(r"https?://[^\s<>()\[\]]+")
 # pattern instead of failing.
 FILENAMES = {
     "arxiv": (re.compile(r"\A\d{4}-\d{2}-\d{2}-arxiv-brief\.md\Z"), "YYYY-MM-DD-arxiv-brief.md"),
-    "news": (re.compile(r"\A\d{4}-\d{2}-\d{2}-daily-brief\.md\Z"), "YYYY-MM-DD-daily-brief.md"),
-    "research": (
+    "conferences": (
+        re.compile(r"\A\d{4}-\d{2}-\d{2}-daily-brief\.md\Z"),
+        "YYYY-MM-DD-daily-brief.md",
+    ),
+    "deep-dives": (
         re.compile(r"\A\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md\Z"),
         "YYYY-MM-DD-<topic-slug>.md",
     ),

@@ -23,8 +23,8 @@ FAILURES: list[str] = []
 # and 990b2d8. Changing this tuple has to be a deliberate edit to this line.
 EXPECTED_ALLOWLIST = (
     "content/arxiv/*.md",
-    "content/news/*.md",
-    "content/research/*.md",
+    "content/conferences/*.md",
+    "content/deep-dives/*.md",
     "automation/state/*",
 )
 if ALLOWED != EXPECTED_ALLOWLIST:
@@ -37,11 +37,11 @@ if ALLOWED != EXPECTED_ALLOWLIST:
 
 ALLOW = [
     "content/arxiv/2026-09-15-arxiv-brief.md",
-    "content/news/2026-09-15-daily-brief.md",
-    "content/news/nested/thing.md",
-    "content/research/2026-09-15-some-topic.md",
+    "content/conferences/2026-09-15-daily-brief.md",
+    "content/conferences/nested/thing.md",
+    "content/deep-dives/2026-09-15-some-topic.md",
     "automation/state/seen.ndjson",
-    "./content/news/2026-09-15-daily-brief.md",
+    "./content/conferences/2026-09-15-daily-brief.md",
 ]
 
 DENY = [
@@ -65,12 +65,13 @@ DENY = [
     "automation/config/topics.toml",
     # Traversal.
     "../../etc/passwd",
-    "content/news/../../../etc/passwd",
+    "content/conferences/../../../etc/passwd",
     "/etc/passwd",
     # Backslash traversal: split("/") alone does not see the "..".
-    "content/news/..\\..\\go.mod",
+    "content/conferences/..\\..\\go.mod",
     # Near-misses that must not be confused for the allowed prefixes.
-    "content/newsletter/x.md",
+    "content/conferencesfoo/x.md",
+    "content/deep-divesfoo/x.md",
     "content/arxivfoo/x.md",
     "content/arxiv.md",
     "content/about.md",
@@ -79,10 +80,10 @@ DENY = [
     # Non-Markdown under content/. Hugo publishes a .html content file verbatim,
     # bypassing Goldmark, and validate.py only ever globs *.md — so these would
     # be raw, unvalidated output on the live site.
-    "content/news/evil.html",
-    "content/news/evil.js",
-    "content/news/.gitattributes",
-    "content/research/x.xml",
+    "content/conferences/evil.html",
+    "content/conferences/evil.js",
+    "content/conferences/.gitattributes",
+    "content/deep-dives/x.xml",
     "content/arxiv/evil.html",
     "content/arxiv/x.xml",
     # Whitespace must not be normalised away: a file really named "config.toml "
@@ -115,7 +116,7 @@ def check_raw(label: str, raw: str, must_deny: str) -> None:
 check_raw(
     "rename hides the source",
     ":100644 100644 aaaa bbbb R100\0.github/workflows/pages.yml\0"
-    "content/news/2026-09-15-daily-brief.md\0",
+    "content/conferences/2026-09-15-daily-brief.md\0",
     ".github/workflows/pages.yml",
 )
 
@@ -123,14 +124,14 @@ check_raw(
 # what makes it an escape.
 check_raw(
     "symlink mode is refused",
-    ":000000 120000 0000 cccc A\0content/news/2026-09-15-daily-brief.md\0",
+    ":000000 120000 0000 cccc A\0content/conferences/2026-09-15-daily-brief.md\0",
     "<mode 120000>",
 )
 
 # A submodule gitlink dropped into the content tree.
 check_raw(
     "gitlink mode is refused",
-    ":000000 160000 0000 dddd A\0content/news/sub\0",
+    ":000000 160000 0000 dddd A\0content/conferences/sub\0",
     "<mode 160000>",
 )
 
@@ -142,16 +143,16 @@ check_raw(
 )
 
 # An ordinary content edit must still come through clean.
-plain = _parse_raw(":100644 100644 aaaa bbbb M\0content/news/2026-09-15-daily-brief.md\0")
-if plain != ["content/news/2026-09-15-daily-brief.md"]:
+plain = _parse_raw(":100644 100644 aaaa bbbb M\0content/conferences/2026-09-15-daily-brief.md\0")
+if plain != ["content/conferences/2026-09-15-daily-brief.md"]:
     FAILURES.append(f"plain edit mis-parsed: {plain!r}")
 if not all(allowed(p) for p in plain):
     FAILURES.append(f"plain content edit was denied: {plain!r}")
 
 # A path containing a newline stays one path. Under --name-only this split into
 # two fragments that were each judged separately.
-nl = _parse_raw(":000000 100644 0000 ffff A\0content/news/a\nb.md\0")
-if nl != ["content/news/a\nb.md"]:
+nl = _parse_raw(":000000 100644 0000 ffff A\0content/conferences/a\nb.md\0")
+if nl != ["content/conferences/a\nb.md"]:
     FAILURES.append(f"newline in path mis-parsed: {nl!r}")
 
 if FAILURES:

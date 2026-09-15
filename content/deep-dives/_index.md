@@ -1,6 +1,6 @@
 +++
 title = "Deep Dives"
-url = "/research/"
+url = "/deep-dives/"
 summary = "Long-form synthesis of a single research topic"
 +++
 

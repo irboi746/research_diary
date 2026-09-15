@@ -49,8 +49,8 @@ workflow would otherwise be merged automatically.
 `automation/scripts/pathguard.py` therefore restricts generated changes to:
 
 - `content/arxiv/*.md`
-- `content/news/*.md`
-- `content/research/*.md`
+- `content/conferences/*.md`
+- `content/deep-dives/*.md`
 - `automation/state/*`
 
 Content is Markdown-only on purpose: Hugo serves a `.html` file in `content/` verbatim, without
@@ -79,7 +79,7 @@ Two invariants to preserve there: `auto-merge.yml` must never check out or execu
 pull request, and the path check must come before the content checkout.
 
 The guard also inspects blob modes and both sides of a rename. Neither is cosmetic: `--name-only`
-prints only the destination of a rename, so `git mv .github/workflows/pages.yml content/news/x.md`
+prints only the destination of a rename, so `git mv .github/workflows/pages.yml content/conferences/x.md`
 used to read as a single allowed path while the workflow silently vanished.
 
 ### Grounding is checked in code, not asked for in prose
@@ -103,7 +103,7 @@ traps, all of which were hit during development:
   per-line "every bullet needs a URL" rule fails five items in shipped content.
 - Deep-dive prose sections legitimately contain no URL, so per-item source checks are brief-only.
 - Reference entries appear as both `1.` and `[1]`; citations appear grouped (`[9, 10]`).
-- `content/news/` prose contains `argv[1]`, and code fences contain `##` and URLs.
+- `content/conferences/` prose contains `argv[1]`, and code fences contain `##` and URLs.
 
 `linkcheck.py` gates on `doi.org` and `arxiv.org` only. Both answer honestly — an unregistered DOI
 is a 404 and a registered one a 302, **checked without following the redirect**, which sidesteps the
@@ -150,6 +150,40 @@ is ignored at build time. Verify theme behaviour against master, not against `go
 Practical trap: the dark-mode CSS selector is `:root[data-theme="dark"]` on master; it was `.dark`
 until early 2025. Snippets written for `.dark` silently do nothing.
 
+### `layouts/` holds three forked theme templates
+
+`validate-content.yml` fails the build on any `^WARN` line, and Hugo 0.166 warns about three calls
+deprecated in v0.158.0. One is ours (`languages.en.label` in `config.toml`). The other two are inside
+the PaperMod module, which cannot be patched in place, so the repo overrides three theme files:
+
+| File | The one line that differs |
+|---|---|
+| `layouts/baseof.html` | `.Language.LanguageDirection` → `.Language.Direction` (3x) |
+| `layouts/rss.xml` | `site.Language.LanguageCode` → `site.Language.Locale` |
+| `layouts/_partials/templates/opengraph.html` | `site.Language.LanguageCode` → `site.Language.Locale` |
+
+Each carries a header comment naming the theme commit it was copied from (`d376885`). Since the
+theme floats to master, **these will drift**: when re-syncing, copy the theme file again and re-apply
+that single substitution rather than hand-editing the fork. Delete them once upstream PaperMod stops
+using the deprecated calls.
+
+Fixing only `baseof.html` and `rss.xml` leaves the build still warning — `opengraph.html` is easy to
+miss. The theme's `header.html` and `translation_list.html` also call `.Language.LanguageName`, but
+they sit behind a multi-language guard that never runs on this single-language site, so they warn
+about nothing and are deliberately not overridden.
+
+`layouts/rss.xml` starts with a trimmed comment (`*/ -}}`). Untrimmed, the newlines land ahead of
+the XML declaration and every feed becomes malformed.
+
+### Dependencies stop at the merge path
+
+`requirements.txt` (`beautifulsoup4`, `html2text`, `pypdf`) exists for `fulltext.py` only, installed
+once in the Jules VM's environment snapshot. Everything that gates a merge — `pathguard.py`,
+`validate.py`, `postparse.py`, `linkcheck.py` — stays stdlib-only, so no third-party package sits
+between an untrusted pull request and a `contents: write` token. `validate-content.yml` runs no
+`pip install`, and `test_fulltext.py` skips its library-backed half rather than failing there.
+Keep that split when adding tooling.
+
 ### Revert `go.mod` / `go.sum` after local builds
 
 `hugo mod get` rewrites both. Unless a dependency change is the actual goal:
@@ -165,8 +199,8 @@ git checkout -- go.mod go.sum
 | Site config, params, menus | `config.toml` |
 | Colours, fonts, layout geometry | `assets/css/extended/custom.css` (concatenated after theme CSS) |
 | arXiv briefs (daily, tier 1) | `content/arxiv/` |
-| Conference briefs (tier 2 and 3) | `content/news/` |
-| Deep dives | `content/research/` |
+| Conference briefs (tier 2 and 3) | `content/conferences/` |
+| Deep dives | `content/deep-dives/` |
 | Other pages | `content/` |
 | Static files served at site root | `static/` |
 | Build and deploy | `.github/workflows/pages.yml` |
@@ -174,12 +208,16 @@ git checkout -- go.mod go.sum
 | Research scope, sources, tag vocabulary | `automation/config/topics.toml` |
 | Pipeline tooling and its tests | `automation/scripts/` |
 | Post parsing shared by the checkers | `automation/scripts/postparse.py` |
+| arXiv RSS ingestion | `automation/scripts/arxiv.py` |
+| Relevance ranking (advisory) | `automation/scripts/rank.py` |
+| Full-text retrieval (needs `requirements.txt`) | `automation/scripts/fulltext.py` |
+| Conference backlog queue | `automation/scripts/queue.py` |
+| Backlog state | `automation/state/backlog.ndjson` |
 | Citation resolution (network) | `automation/scripts/linkcheck.py` |
 | Deduplication state | `automation/state/seen.ndjson` |
 | Content format references | `automation/examples/` |
 | PR validation (advisory; runs PR code) | `.github/workflows/validate-content.yml` |
 | Auto-merge — the trust boundary, runs from `main` | `.github/workflows/auto-merge.yml` |
-| Pipeline health canary | `.github/workflows/staleness.yml` |
 
 Do not add files to `themes/` — the theme is a Hugo module. The directory holds only `.gitkeep`.
 
@@ -196,7 +234,7 @@ python3 automation/scripts/validate.py
 you changed:
 
 ```shell
-python3 automation/scripts/linkcheck.py --files content/research/<post>.md
+python3 automation/scripts/linkcheck.py --files content/deep-dives/<post>.md
 ```
 
 Hugo is not installed locally; use a Docker image. CI pins its own Hugo version (`HUGO_VERSION` in

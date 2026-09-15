@@ -91,6 +91,12 @@ for u in (
     "https://www.usenix.org/conference/woot24/technical-sessions",
     "https://defcon.org/html/links/dc-archives/dc-30-archive.html",
     "https://www.blackhat.com/us-24/briefings/schedule/",
+    "https://www.ieee-security.org/TC/SP2026/",
+    "https://www.ndss-symposium.org/ndss2026/accepted-papers/",
+    "https://www.sigsac.org/ccs/CCS2026/",
+    "https://www.unprompted.au/schedule",
+    # Retired as a source, still blocked as a citation. The set must only grow:
+    # dropping a venue is not a reason to start trusting its landing page.
     "https://offbyone.sg/",
 ):
     if P.normalize_url(u) not in INDEXES:

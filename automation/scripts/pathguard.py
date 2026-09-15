@@ -10,9 +10,9 @@ So the trust boundary is here, not in the prompt. Whatever the agent was told or
 talked into, a pull request may only change:
 
     content/arxiv/**           the arXiv briefs
-    content/news/**            the conference briefs
-    content/research/**        the deep dives
-    automation/state/**        dedup bookkeeping
+    content/conferences/**     the conference briefs
+    content/deep-dives/**      the deep dives
+    automation/state/**        dedup and backlog bookkeeping
 
 Anything else — workflows, config.toml, go.mod, the scripts themselves, this file
 — fails the check, blocks auto-merge, and leaves the pull request open for a
@@ -37,13 +37,13 @@ ALLOWED = (
     # extension would hand the agent a raw-HTML publishing primitive that
     # validate.py never sees — it only globs *.md.
     "content/arxiv/*.md",
-    "content/news/*.md",
-    "content/research/*.md",
+    "content/conferences/*.md",
+    "content/deep-dives/*.md",
     "automation/state/*",
 )
 
 # git's blob mode for an ordinary file. Anything else is refused: 120000 is a
-# symlink (content/news/post.md pointing at a workflow, so a later write escapes
+# symlink (content/conferences/post.md pointing at a workflow, so a later write escapes
 # the allowlist), 160000 a submodule gitlink, 100755 an executable bit on a file
 # CI runs. 000000 means the side does not exist — an add or a delete.
 REGULAR = "100644"
@@ -59,7 +59,7 @@ def allowed(path: str) -> bool:
     if not p or p.startswith("/"):
         return False
     # Backslash counts as a separator: split("/") alone sees no ".." in
-    # "content/news/..\..\go.mod", which git would honour on a Windows checkout.
+    # "content/conferences/..\..\go.mod", which git would honour on a Windows checkout.
     if ".." in p.replace("\\", "/").split("/"):
         return False
     return any(fnmatch.fnmatch(p, pattern) for pattern in ALLOWED)
@@ -69,7 +69,7 @@ def changed_files(base: str, head: str = "HEAD") -> list[str]:
     """Every path this branch touches, plus both sides of any rename.
 
     --name-only prints only the *destination* of a detected rename, so
-    `git mv .github/workflows/pages.yml content/news/x.md` would look like one
+    `git mv .github/workflows/pages.yml content/conferences/x.md` would look like one
     allowed path while the workflow silently disappeared. --raw reports both
     names and both blob modes; -z keeps paths intact when they contain a newline
     or a quotable byte, which --name-only would have C-quoted or split.
@@ -156,8 +156,8 @@ def main(argv: list[str] | None = None) -> int:
     if violations:
         print(
             f"\npathguard: FAILED — {len(violations)} path(s) outside the allowlist.\n"
-            "Generated content may only touch content/arxiv/, content/news/,\n"
-            "content/research/ and automation/state/. This pull request needs a\n"
+            "Generated content may only touch content/arxiv/, content/conferences/,\n"
+            "content/deep-dives/ and automation/state/. This pull request needs a\n"
             "human to look at it.",
             file=sys.stderr,
         )

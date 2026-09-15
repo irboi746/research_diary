@@ -1,7 +1,7 @@
 +++
 title = "Conference Brief — 2026-09-14"
 date = 2026-09-14T06:00:00Z
-type = "news"
+type = "conferences"
 tags = ["fuzzing", "exploitation", "protocol-analysis", "llm-security", "usenix"]
 summary = "USENIX Security and WOOT 2026: an app-agnostic route from file overwrite to code execution on Android, the first look inside AirDrop and Quick Share, and three fuzzers aimed at places fuzzers have not been."
 +++

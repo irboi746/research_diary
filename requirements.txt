@@ -1,0 +1,13 @@
+# Dependencies for the ingestion tools only (fulltext.py).
+#
+# Install these in the Jules VM once, from the console's environment setup step,
+# then take the snapshot: see "Jules console environment" in README.md. Re-run
+# and re-snapshot whenever this file changes, or the VM keeps the old packages.
+#
+# Deliberately NOT needed by the checkers that run on the merge path --
+# pathguard.py, validate.py, postparse.py and linkcheck.py are stdlib-only, so
+# auto-merge.yml installs nothing between an untrusted pull request and a
+# contents:write token. Keep it that way.
+beautifulsoup4==4.15.0
+html2text==2025.4.15
+pypdf==6.18.1

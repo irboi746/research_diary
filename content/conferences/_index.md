@@ -1,6 +1,6 @@
 +++
 title = "Conference Briefs"
-url = "/news/"
+url = "/conferences/"
 summary = "Roundups of new conference proceedings and security research"
 +++
 

@@ -1,7 +1,7 @@
 +++
 title = "Kubernetes Security: Cloud vs. On-Premises Deployments"
 date = 2026-09-15T04:00:00Z
-type = "research"
+type = "deep-dives"
 tags = ["cs.CR", "exploitation", "supply-chain", "network-security", "kernel"]
 slug = "kubernetes-security-cloud-vs-on-prem"
 +++

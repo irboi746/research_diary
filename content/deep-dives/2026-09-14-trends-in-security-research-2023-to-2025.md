@@ -1,7 +1,7 @@
 +++
 title = "Trends in Security Research (2023-2025)"
 date = 2026-09-14T18:12:49Z
-type = "research"
+type = "deep-dives"
 tags = ["web-security", "llm-security", "fuzzing", "cryptography", "usenix", "defcon", "blackhat", "arxiv", "off-by-one"]
 slug = "trends-in-security-research-2023-to-2025"
 +++

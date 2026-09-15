@@ -7,13 +7,20 @@ ShowBreadCrumbs = false
 ShowPostNavLinks = false
 +++
 
-A research diary covering technical security and computer science work — new preprints, conference
-proceedings, and implementation documentation.
+A research diary covering offensive security work — new preprints, conference proceedings, and
+implementation documentation.
+
+The beat is attacks and the techniques behind them: memory-safety bugs and mitigation bypasses,
+fuzzing and automated vulnerability discovery, reverse engineering and binary analysis, kernel,
+firmware and embedded exploitation, side channels, applied cryptography breaks, supply-chain
+attacks, server-side web and browser attack classes, mobile and cloud isolation failures, and both
+sides of the LLM question — models used to find and exploit bugs, and attacks on LLM-based systems
+themselves. Defence-only and detection work is out of scope unless it carries a new attack result.
 
 Entries under [arXiv Briefs](/arxiv/) are daily roundups of new preprints. Entries under
-[Conferences](/news/) cover new proceedings from USENIX, DEF CON, Black Hat, Off-by-One and
-elsewhere on the web. Entries under [Deep Dives](/research/) are long-form syntheses of a single
-topic.
+[Conferences](/conferences/) cover new proceedings from USENIX Security, USENIX WOOT, IEEE S&P,
+NDSS, ACM CCS, DEF CON, Black Hat and [un]prompted, plus elsewhere on the web. Entries under
+[Deep Dives](/deep-dives/) are long-form syntheses of a single topic.
 
 ## How this site is written
 

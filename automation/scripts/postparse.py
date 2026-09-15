@@ -170,6 +170,12 @@ def index_urls() -> set[str]:
                 except (KeyError, IndexError, ValueError):
                     continue
                 out.add(normalize_url(expanded))
+
+    # Venues that have been dropped from `sources`. Without these the blocklist
+    # would shrink whenever a source is retired, quietly re-permitting exactly
+    # the index-page citation this set exists to catch.
+    for url in cfg.get("retired_index_urls", []):
+        out.add(normalize_url(url))
     return out
 
 

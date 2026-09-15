@@ -52,6 +52,10 @@ jobs:
         run: |
           python3 automation/scripts/pathguard.py --base "origin/$BASE_REF"
 
+      # No pip install here, deliberately. These run stdlib-only so the merge
+      # path never puts a third-party package between an untrusted pull request
+      # and a write token; test_fulltext.py skips its library-backed half rather
+      # than failing. See requirements.txt.
       - name: Script self-tests
         run: |
           python3 automation/scripts/test_idstate.py
@@ -59,6 +63,9 @@ jobs:
           python3 automation/scripts/test_postparse.py
           python3 automation/scripts/test_validate.py
           python3 automation/scripts/test_arxiv.py
+          python3 automation/scripts/test_rank.py
+          python3 automation/scripts/test_queue.py
+          python3 automation/scripts/test_fulltext.py
 
       - name: Content schema
         run: python3 automation/scripts/validate.py
@@ -113,7 +120,7 @@ jobs:
               missing=$((missing + 1))
             fi
           done < <(git diff --name-only -z "origin/$BASE_REF...HEAD" \
-                     -- 'content/arxiv/*.md' 'content/news/*.md' 'content/research/*.md')
+                     -- 'content/arxiv/*.md' 'content/conferences/*.md' 'content/deep-dives/*.md')
 
           if [ "$missing" -gt 0 ]; then
             echo
