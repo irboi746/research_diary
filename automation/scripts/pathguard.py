@@ -37,6 +37,7 @@ ALLOWED = (
     ".github/workflows/*",
     "config.toml",
     "automation/scripts/pathguard.py",
+    "automation/scripts/sources.py",
 )
 
 
