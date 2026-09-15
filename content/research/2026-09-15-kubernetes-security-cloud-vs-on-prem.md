@@ -12,11 +12,11 @@ The transition to Kubernetes is not merely a change in deployment mechanisms; it
 
 The advent of containerization fundamentally altered the software development and deployment lifecycle, shifting the industry from monolithic architectures to agile, distributed microservices. As the ecosystem matured, Kubernetes emerged as the de facto standard for container orchestration, providing a unified API to automate deployment, scaling, and operations of application containers across clusters of hosts [1]. However, this centralization of control and the massive scale of modern distributed systems introduced profound security challenges, necessitating a comprehensive re-evaluation of infrastructure defense strategies.
 
-Historically, securing a data center meant fortifying the perimeter, patching host operating systems, and segmenting networks via traditional firewalls. Kubernetes introduced a highly dynamic and ephemeral paradigm where IP addresses change continuously, workloads scale up and down in seconds, and traditional perimeter defenses are largely oblivious to intra-cluster traffic [2]. The Kubernetes control plane—comprising the API server, etcd datastore, controller manager, and scheduler—acts as the brain of the cluster, while the data plane—nodes running kubelet, kube-proxy, and the container runtime—executes the workloads. Compromising either plane can lead to complete cluster takeover [3].
+Historically, securing a data center meant fortifying the perimeter, patching host operating systems, and segmenting networks via traditional firewalls. Kubernetes introduced a highly dynamic and ephemeral paradigm where IP addresses change continuously, workloads scale up and down in seconds, and traditional perimeter defenses are largely oblivious to intra-cluster traffic [2]. The Kubernetes control plane—comprising the API server, etcd datastore, controller manager, and scheduler—acts as the brain of the cluster, while the data plane—nodes running kubelet, kube-proxy, and the container runtime—executes the workloads. Compromising either plane can lead to complete cluster takeover.
 
-A critical dimension of Kubernetes security is the deployment model. Organizations must choose between Cloud-managed Kubernetes (PaaS/SaaS offerings like Amazon EKS, Google GKE, and Azure AKS) and On-Premises deployments (IaaS or self-provisioned hardware using distributions like OpenShift, RKE, or vanilla Kubernetes). This decision dictates the security posture, responsibilities, and available mitigation strategies [4].
+A critical dimension of Kubernetes security is the deployment model. Organizations must choose between Cloud-managed Kubernetes (PaaS/SaaS offerings like Amazon EKS, Google GKE, and Azure AKS) and On-Premises deployments (IaaS or self-provisioned hardware using distributions like OpenShift, RKE, or vanilla Kubernetes). This decision dictates the security posture, responsibilities, and available mitigation strategies.
 
-In a Cloud-managed environment, the cloud provider assumes responsibility for the security of the control plane and underlying physical infrastructure under the Shared Responsibility Model. The provider manages API server availability, etcd encryption at rest, and infrastructure patching [5]. The customer is responsible for the security of the worker nodes, network policies, IAM configurations, and the applications themselves. In contrast, On-Premises deployments demand full-stack responsibility from the organization. The customer must secure the physical hardware, the hypervisor or host OS, the entire Kubernetes control plane, network routing, and storage integration. This fundamental divergence in responsibility dictates how organizations must approach Kubernetes security, heavily influencing vulnerability management, identity access, and architectural isolation [6].
+In a Cloud-managed environment, the cloud provider assumes responsibility for the security of the control plane and underlying physical infrastructure under the Shared Responsibility Model. The provider manages API server availability, etcd encryption at rest, and infrastructure patching [3]. The customer is responsible for the security of the worker nodes, network policies, IAM configurations, and the applications themselves. In contrast, On-Premises deployments demand full-stack responsibility from the organization. The customer must secure the physical hardware, the hypervisor or host OS, the entire Kubernetes control plane, network routing, and storage integration. This fundamental divergence in responsibility dictates how organizations must approach Kubernetes security, heavily influencing vulnerability management, identity access, and architectural isolation [4].
 
 ## Current State
 
@@ -37,47 +37,47 @@ Cloud providers simplify this by automatically forwarding audit logs to centrali
 On-Premises deployments require operators to configure the API server's audit policy and manage the infrastructure to aggregate and analyze these logs, typically using the ELK stack (Elasticsearch, Logstash, Kibana) or Prometheus/Grafana. The risk in on-prem environments is that an attacker who gains cluster admin privileges might also be able to tamper with or disable the local logging infrastructure, blinding defenders.
 
 
-The current landscape of Kubernetes security is characterized by an ongoing arms race between attackers exploiting the complexity of the platform and defenders developing sophisticated runtime, identity, and network security tooling. The deployment model—Cloud versus On-Premises—profoundly shapes the attack surface and the mechanisms used to secure it [7].
+The current landscape of Kubernetes security is characterized by an ongoing arms race between attackers exploiting the complexity of the platform and defenders developing sophisticated runtime, identity, and network security tooling. The deployment model—Cloud versus On-Premises—profoundly shapes the attack surface and the mechanisms used to secure it [5].
 
 ### Container Escapes and Runtime Security
 
-At the lowest level, Kubernetes relies on container runtimes (like containerd or CRI-O) to execute workloads. The security of the node depends on isolating these containers from the host kernel. Vulnerabilities in container runtimes or the Linux kernel itself can lead to container escapes, where an attacker breaks out of the container boundary to gain root access on the underlying node [8]. Historical examples, such as the `runc` vulnerability (CVE-2019-5736) or "Leaky Vessels" (CVE-2024-21626), demonstrate the severity of these attacks [9].
+At the lowest level, Kubernetes relies on container runtimes (like containerd or CRI-O) to execute workloads. The security of the node depends on isolating these containers from the host kernel. Vulnerabilities in container runtimes or the Linux kernel itself can lead to container escapes, where an attacker breaks out of the container boundary to gain root access on the underlying node. Historical examples, such as the `runc` vulnerability (CVE-2019-5736) or "Leaky Vessels" (CVE-2024-21626), demonstrate the severity of these attacks [6].
 
-In On-Premises environments, mitigating container escapes requires rigorous lifecycle management of the host OS kernel and container runtime. Defenders often deploy security modules like SELinux, AppArmor, or Seccomp profiles to restrict system calls, but managing these at scale is notoriously complex [10]. When a node is compromised on-prem, lateral movement to the control plane is often feasible if network segmentation is insufficient.
+In On-Premises environments, mitigating container escapes requires rigorous lifecycle management of the host OS kernel and container runtime. Defenders often deploy security modules like SELinux, AppArmor, or Seccomp profiles to restrict system calls, but managing these at scale is notoriously complex [7]. When a node is compromised on-prem, lateral movement to the control plane is often feasible if network segmentation is insufficient.
 
-Cloud-managed environments face similar container escape risks on standard worker nodes. However, cloud providers offer managed node groups or serverless architectures (e.g., AWS Fargate, GKE Autopilot) where the underlying OS is abstracted and patched automatically by the provider [11]. Furthermore, cloud platforms increasingly support sandboxed runtimes like gVisor or hardware-assisted virtualization like Kata Containers out-of-the-box, providing a robust defense-in-depth layer against kernel-level exploits [12].
+Cloud-managed environments face similar container escape risks on standard worker nodes. However, cloud providers offer managed node groups or serverless architectures (e.g., AWS Fargate, GKE Autopilot) where the underlying OS is abstracted and patched automatically by the provider [8]. Furthermore, cloud platforms increasingly support sandboxed runtimes like gVisor or hardware-assisted virtualization like Kata Containers out-of-the-box, providing a robust defense-in-depth layer against kernel-level exploits [9].
 
 ### Control Plane Exposure and Security
 
 The Kubernetes API server is the heart of the cluster; it processes REST operations and updates the cluster state stored in etcd. Exposing the API server to unauthorized access is a critical failure.
 
-In Cloud deployments, the control plane is highly managed. The API server endpoint can be protected by cloud-native security controls, such as VPC endpoints, authorized IP ranges, and private clusters where the control plane is only accessible from within the customer's private network [13]. Furthermore, etcd is typically encrypted at rest automatically using cloud-managed KMS (Key Management Service). However, misconfigurations, such as leaving the API server publicly accessible without stringent authentication, still occur and are heavily targeted [14].
+In Cloud deployments, the control plane is highly managed. The API server endpoint can be protected by cloud-native security controls, such as VPC endpoints, authorized IP ranges, and private clusters where the control plane is only accessible from within the customer's private network. Furthermore, etcd is typically encrypted at rest automatically using cloud-managed KMS (Key Management Service). However, misconfigurations, such as leaving the API server publicly accessible without stringent authentication, still occur and are heavily targeted [10].
 
-On-Premises environments require the operator to secure the API server manually. This involves configuring TLS certificates properly, ensuring anonymous authentication is disabled (`--anonymous-auth=false`), and tightly controlling network access to the API server and etcd [15]. Unencrypted etcd volumes in on-prem environments have historically been a significant vector; if an attacker gains access to the underlying storage or the network where etcd communicates, they can extract all cluster secrets and configuration data [16].
+On-Premises environments require the operator to secure the API server manually. This involves configuring TLS certificates properly, ensuring anonymous authentication is disabled (`--anonymous-auth=false`), and tightly controlling network access to the API server and etcd [11]. Unencrypted etcd volumes in on-prem environments have historically been a significant vector; if an attacker gains access to the underlying storage or the network where etcd communicates, they can extract all cluster secrets and configuration data [12].
 
 ### Identity, Authentication, and RBAC
 
-Kubernetes utilizes Role-Based Access Control (RBAC) to govern permissions within the cluster. Misconfigurations in RBAC are one of the most common vectors for privilege escalation. Granting excessive permissions, such as allowing a pod to read all secrets or create new pods (which can mount the host filesystem), effectively equates to cluster admin [17].
+Kubernetes utilizes Role-Based Access Control (RBAC) to govern permissions within the cluster. Misconfigurations in RBAC are one of the most common vectors for privilege escalation. Granting excessive permissions, such as allowing a pod to read all secrets or create new pods (which can mount the host filesystem), effectively equates to cluster admin.
 
-The integration of authentication differs significantly between the two models. Cloud deployments leverage the provider's Identity and Access Management (IAM). Tools like AWS IAM Roles for Service Accounts (IRSA) or GCP Workload Identity allow pods to assume cloud identities, enabling secure access to external cloud services (like S3 buckets or Cloud SQL) without hardcoding credentials [18]. This tightly couples Kubernetes identity with the cloud provider's identity plane, centralizing auditing but also creating complex attack paths if an attacker exploits a SSRF (Server-Side Request Forgery) vulnerability to query the cloud metadata endpoint [19].
+The integration of authentication differs significantly between the two models. Cloud deployments leverage the provider's Identity and Access Management (IAM). Tools like AWS IAM Roles for Service Accounts (IRSA) or GCP Workload Identity allow pods to assume cloud identities, enabling secure access to external cloud services (like S3 buckets or Cloud SQL) without hardcoding credentials [13]. This tightly couples Kubernetes identity with the cloud provider's identity plane, centralizing auditing but also creating complex attack paths if an attacker exploits a SSRF (Server-Side Request Forgery) vulnerability to query the cloud metadata endpoint.
 
-On-Premises authentication relies on integrating Kubernetes with enterprise identity providers via OIDC (OpenID Connect), LDAP, or SAML. This integration requires significant engineering effort and dedicated infrastructure, such as Dex or Keycloak, to bridge the gap [20]. Without the seamless IAM integration found in the cloud, on-prem clusters often rely on long-lived service account tokens or external secret management systems (like HashiCorp Vault), which introduce their own operational complexities and potential points of failure [21].
+On-Premises authentication relies on integrating Kubernetes with enterprise identity providers via OIDC (OpenID Connect), LDAP, or SAML. This integration requires significant engineering effort and dedicated infrastructure, such as Dex or Keycloak, to bridge the gap [14]. Without the seamless IAM integration found in the cloud, on-prem clusters often rely on long-lived service account tokens or external secret management systems (like HashiCorp Vault), which introduce their own operational complexities and potential points of failure [15].
 
 ### Supply Chain Security
 
-The software supply chain has become a primary target for attackers, seeking to inject malicious code into applications before they are even deployed to the cluster. This involves compromising source code repositories, CI/CD pipelines, or container registries [22].
+The software supply chain has become a primary target for attackers, seeking to inject malicious code into applications before they are even deployed to the cluster. This involves compromising source code repositories, CI/CD pipelines, or container registries [16].
 
-Securing the supply chain is largely agnostic to the underlying deployment model, but the implementation tools vary. In both environments, best practices dictate signing container images and verifying those signatures before deployment using admission controllers. Projects like Sigstore (Cosign) have democratized image signing, making it easier to cryptographically verify image provenance [23].
+Securing the supply chain is largely agnostic to the underlying deployment model, but the implementation tools vary. In both environments, best practices dictate signing container images and verifying those signatures before deployment using admission controllers. Projects like Sigstore (Cosign) have democratized image signing, making it easier to cryptographically verify image provenance [17].
 
-Cloud providers integrate supply chain security directly into their ecosystems. For example, AWS Elastic Container Registry (ECR) and Google Artifact Registry provide automated image scanning, while binary authorization policies can natively prevent the deployment of unsigned images [24]. On-Premises environments must build this pipeline manually, integrating tools like Harbor for registry scanning, and utilizing policy engines such as OPA Gatekeeper or Kyverno to enforce deployment policies [25].
+Cloud providers integrate supply chain security directly into their ecosystems. For example, AWS Elastic Container Registry (ECR) and Google Artifact Registry provide automated image scanning, while binary authorization policies can natively prevent the deployment of unsigned images [18]. On-Premises environments must build this pipeline manually, integrating tools like Harbor for registry scanning, and utilizing policy engines such as OPA Gatekeeper or Kyverno to enforce deployment policies [19].
 
 ### Network Security and Multi-tenancy
 
-By default, Kubernetes allows all pods to communicate with all other pods across the cluster. This flat network topology facilitates lateral movement for attackers. Implementing NetworkPolicies to restrict ingress and egress traffic is fundamental to cluster security [26].
+By default, Kubernetes allows all pods to communicate with all other pods across the cluster. This flat network topology facilitates lateral movement for attackers. Implementing NetworkPolicies to restrict ingress and egress traffic is fundamental to cluster security [20].
 
-In Cloud environments, the cloud provider's CNI (Container Network Interface) often integrates with the native Virtual Private Cloud (VPC) constructs, allowing network security groups to apply directly to pods. This simplifies network policy enforcement but can consume cloud-specific IP addresses rapidly [27].
+In Cloud environments, the cloud provider's CNI (Container Network Interface) often integrates with the native Virtual Private Cloud (VPC) constructs, allowing network security groups to apply directly to pods. This simplifies network policy enforcement but can consume cloud-specific IP addresses rapidly [21].
 
-On-Premises environments frequently leverage advanced CNI plugins like Calico or Cilium. Cilium, powered by eBPF (Extended Berkeley Packet Filter), has revolutionized on-prem network security by providing highly performant, identity-based network observability and enforcement at the kernel level, independent of the underlying network topology [28].
+On-Premises environments frequently leverage advanced CNI plugins like Calico or Cilium. Cilium, powered by eBPF (Extended Berkeley Packet Filter), has revolutionized on-prem network security by providing highly performant, identity-based network observability and enforcement at the kernel level, independent of the underlying network topology [22].
 
 
 ### Advanced Network Segmentation and eBPF
@@ -155,46 +155,38 @@ The security of the GitOps workflow itself becomes paramount. The Git repository
 
 ## Future Outlook
 
-The trajectory of Kubernetes security is moving toward tighter integration of identity, automated policy enforcement, and the utilization of hardware-level isolation. As the ecosystem matures, the distinction between cloud and on-prem security paradigms will blur as cloud-native operating models are increasingly adopted in on-prem data centers via technologies like Anthos, Azure Arc, or EKS Anywhere [29].
+The trajectory of Kubernetes security is moving toward tighter integration of identity, automated policy enforcement, and the utilization of hardware-level isolation. As the ecosystem matures, the distinction between cloud and on-prem security paradigms will blur as cloud-native operating models are increasingly adopted in on-prem data centers via technologies like Anthos, Azure Arc, or EKS Anywhere.
 
-A significant area of future development is the universal adoption of Zero Trust architectures within the cluster. This involves moving beyond network-based perimeters to identity-based micro-segmentation, primarily driven by service meshes like Istio or Linkerd enforcing mutual TLS (mTLS) for all intra-cluster communication [30]. Furthermore, the integration of Software Bill of Materials (SBOM) generation and validation will become standard, automated components of the Kubernetes deployment lifecycle, thwarting advanced supply chain attacks [31].
+A significant area of future development is the universal adoption of Zero Trust architectures within the cluster. This involves moving beyond network-based perimeters to identity-based micro-segmentation, primarily driven by service meshes like Istio or Linkerd enforcing mutual TLS (mTLS) for all intra-cluster communication [23]. Furthermore, the integration of Software Bill of Materials (SBOM) generation and validation will become standard, automated components of the Kubernetes deployment lifecycle, thwarting advanced supply chain attacks [24].
 
-The use of AI and Large Language Models (LLMs) in Kubernetes security operations is an emerging frontier. We anticipate the deployment of automated agents capable of continuously auditing RBAC configurations, analyzing complex network policies, and generating real-time incident response plans based on eBPF telemetry [32].
+The use of AI and Large Language Models (LLMs) in Kubernetes security operations is an emerging frontier. We anticipate the deployment of automated agents capable of continuously auditing RBAC configurations, analyzing complex network policies, and generating real-time incident response plans based on eBPF telemetry.
 
-Finally, the adoption of Confidential Computing is poised to reshape node security. Trusted Execution Environments (TEEs) allow workloads to run in memory enclaves encrypted by the processor, ensuring that even a compromised host OS, hypervisor, or cloud provider cannot access the container's data in use. As hardware support for TEEs (like AMD SEV-SNP or Intel TDX) becomes ubiquitous in both cloud instances and on-prem servers, Kubernetes will evolve to orchestrate and manage these highly secure workloads natively [33].
+Finally, the adoption of Confidential Computing is poised to reshape node security. Trusted Execution Environments (TEEs) allow workloads to run in memory enclaves encrypted by the processor, ensuring that even a compromised host OS, hypervisor, or cloud provider cannot access the container's data in use. As hardware support for TEEs (like AMD SEV-SNP or Intel TDX) becomes ubiquitous in both cloud instances and on-prem servers, Kubernetes will evolve to orchestrate and manage these highly secure workloads natively [25].
 
 ## References
 
 1. Burns, B. et al. "Borg, Omega, and Kubernetes: Lessons learned from three container-management systems." ACM Queue, 2016. https://dl.acm.org/doi/10.1145/2898442.2898444
 2. B. Bencsath et al., "The Duqu Trojan", 2012. (Contextualizing legacy perimeter defense failures). https://dl.acm.org/doi/10.1145/2133375.2133390
-3. USENIX Security '23. "A Comprehensive Study of Kubernetes Security Architectures." https://www.usenix.org/conference/usenixsecurity23/technical-sessions/k8s
-4. DEF CON 30. "Cloud vs. On-Premises Kubernetes: An Attacker's Perspective." https://defcon.org/html/links/dc-archives/dc-30-archive.html
-5. Amazon Web Services. "Shared Responsibility Model." https://aws.amazon.com/compliance/shared-responsibility-model/
-6. Kubernetes Documentation. "Securing a Cluster." https://kubernetes.io/docs/tasks/administer-cluster/securing-a-cluster/
-7. CISA. "Kubernetes Hardening Guidance." https://www.cisa.gov/resources-tools/resources/kubernetes-hardening-guidance
-8. Xing, T. et al. "Understanding and Mitigating Container Escapes." IEEE S&P 2021. https://doi.org/10.1109/SP46214.2021.9833751
-9. NVD. "CVE-2019-5736: runc container breakout vulnerability." https://nvd.nist.gov/vuln/detail/CVE-2019-5736
-10. Linux Kernel Archives. "Seccomp BPF." https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html
-11. Google Cloud. "GKE Autopilot Security." https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-security
-12. gVisor Project. "Container Isolation at Scale." https://gvisor.dev/docs/
-13. Black Hat USA 2024. "Pivoting through Managed Kubernetes." https://www.blackhat.com/us-24/briefings/schedule/
-14. Unit 42. "Kinsing Malware Targets Unsecured Kubernetes API Servers." https://unit42.paloaltonetworks.com/kinsing-malware-campaign/
-15. Kubernetes Documentation. "Authenticating." https://kubernetes.io/docs/reference/access-authn-authz/authentication/
-16. etcd Documentation. "Security and TLS." https://etcd.io/docs/current/op-guide/security/
-17. Off-by-One 2025. "RBAC Misconfigurations in the Wild." https://offbyone.sg/
-18. AWS Blogs. "Introducing IAM Roles for Service Accounts." https://aws.amazon.com/blogs/opensource/introducing-fine-grained-iam-roles-service-accounts/
-19. DEF CON 29. "SSRF in the Cloud Era: Exploiting Metadata Endpoints." https://defcon.org/html/links/dc-archives/dc-29-archive.html
-20. Dex. "Dex Identity Provider." https://dexidp.io/
-21. HashiCorp Vault. "Kubernetes Auth Method." https://developer.hashicorp.com/vault/docs/auth/kubernetes
-22. CNCF. "Software Supply Chain Security Best Practices." https://github.com/cncf/tag-security/tree/main/supply-chain-security
-23. Sigstore. "Cosign: Container Signing, Verification and Storage in an OCI registry." https://sigstore.dev/
-24. Google Cloud. "Binary Authorization." https://cloud.google.com/binary-authorization
-25. Open Policy Agent. "Gatekeeper: Policy Controller for Kubernetes." https://openpolicyagent.github.io/gatekeeper/
-26. Kubernetes Documentation. "Network Policies." https://kubernetes.io/docs/concepts/services-networking/network-policies/
-27. AWS EKS. "Amazon VPC CNI plugin for Kubernetes." https://docs.aws.amazon.com/eks/latest/userguide/pod-networking.html
-28. Cilium. "eBPF-based Networking, Observability, and Security." https://cilium.io/
-29. USENIX WOOT 2024. "Hybrid Cloud Attack Surfaces: Bridging On-Prem and Cloud." https://www.usenix.org/conference/woot24/technical-sessions
-30. Istio. "Istio Security and Mutual TLS." https://istio.io/latest/docs/concepts/security/
-31. NTIA. "The Minimum Elements For a Software Bill of Materials (SBOM)." https://www.ntia.doc.gov/report/2021/minimum-elements-software-bill-materials-sbom
-32. arXiv:2605.12345 "Automated Reasoning over Kubernetes RBAC with LLMs." https://arxiv.org/abs/2605.12345
-33. Confidential Computing Consortium. "Trusted Execution Environments in Cloud Infrastructure." https://confidentialcomputing.io/
+3. Amazon Web Services. "Shared Responsibility Model." https://aws.amazon.com/compliance/shared-responsibility-model/
+4. Kubernetes Documentation. "Securing a Cluster." https://kubernetes.io/docs/tasks/administer-cluster/securing-a-cluster/
+5. CISA. "Kubernetes Hardening Guidance." https://www.cisa.gov/resources-tools/resources/kubernetes-hardening-guidance
+6. NVD. "CVE-2019-5736: runc container breakout vulnerability." https://nvd.nist.gov/vuln/detail/CVE-2019-5736
+7. Linux Kernel Archives. "Seccomp BPF." https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html
+8. Google Cloud. "GKE Autopilot Security." https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-security
+9. gVisor Project. "Container Isolation at Scale." https://gvisor.dev/docs/
+10. Unit 42. "Unsecured Kubernetes Instances Could Be Vulnerable to Exploitation." https://unit42.paloaltonetworks.com/unsecured-kubernetes-instances/
+11. Kubernetes Documentation. "Authenticating." https://kubernetes.io/docs/reference/access-authn-authz/authentication/
+12. etcd Documentation. "Security and TLS." https://etcd.io/docs/current/op-guide/security/
+13. AWS Blogs. "Introducing IAM Roles for Service Accounts." https://aws.amazon.com/blogs/opensource/introducing-fine-grained-iam-roles-service-accounts/
+14. Dex. "Dex Identity Provider." https://dexidp.io/
+15. HashiCorp Vault. "Kubernetes Auth Method." https://developer.hashicorp.com/vault/docs/auth/kubernetes
+16. CNCF. "Software Supply Chain Security Best Practices." https://github.com/cncf/tag-security/tree/main/community/working-groups/supply-chain-security
+17. Sigstore. "Cosign: Container Signing, Verification and Storage in an OCI registry." https://sigstore.dev/
+18. Google Cloud. "Binary Authorization." https://cloud.google.com/binary-authorization
+19. Open Policy Agent. "Gatekeeper: Policy Controller for Kubernetes." https://open-policy-agent.github.io/gatekeeper/
+20. Kubernetes Documentation. "Network Policies." https://kubernetes.io/docs/concepts/services-networking/network-policies/
+21. AWS EKS. "Amazon VPC CNI plugin for Kubernetes." https://docs.aws.amazon.com/eks/latest/userguide/pod-networking.html
+22. Cilium. "eBPF-based Networking, Observability, and Security." https://cilium.io/
+23. Istio. "Istio Security and Mutual TLS." https://istio.io/latest/docs/concepts/security/
+24. NTIA. "The Minimum Elements For a Software Bill of Materials (SBOM)." https://www.ntia.doc.gov/report/2021/minimum-elements-software-bill-materials-sbom
+25. Confidential Computing Consortium. "Trusted Execution Environments in Cloud Infrastructure." https://confidentialcomputing.io/
