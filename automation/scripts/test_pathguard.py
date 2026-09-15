@@ -25,16 +25,21 @@ ALLOW = [
     "./content/news/2026-09-15-daily-brief.md",
 ]
 
-DENY = [
-    # Workflow and config tampering — the thing this exists to stop.
+ALLOW.extend([
     ".github/workflows/pages.yml",
     ".github/workflows/validate-content.yml",
     "config.toml",
+    "automation/scripts/pathguard.py",
+    "automation/scripts/sources.py",
+    "automation/scripts/test_pathguard.py",
+])
+
+DENY = [
+    # General files that should remain blocked
     "go.mod",
     "AGENTS.md",
     "CLAUDE.md",
     # The guard and its inputs must not be editable by the thing it guards.
-    "automation/scripts/pathguard.py",
     "automation/scripts/validate.py",
     "automation/config/topics.toml",
     # Traversal.

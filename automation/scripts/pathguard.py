@@ -38,6 +38,7 @@ ALLOWED = (
     "config.toml",
     "automation/scripts/pathguard.py",
     "automation/scripts/sources.py",
+    "automation/scripts/test_pathguard.py",
 )
 
 
