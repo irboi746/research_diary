@@ -58,7 +58,10 @@ env = "production"
 # Which sections appear in the homepage list. PaperMod reads this from params.
 mainSections = ["news", "research"]
 defaultTheme = "auto"
-ShowShareButtons = true
+# Site-wide only. single.html gates the share_icons partial on
+# site.Params.ShowShareButtons, not .Param, so a per-page value is ignored --
+# the per-page opt-out that works is disableShare = true.
+ShowShareButtons = false
 ShowReadingTime = true
 ShowPostNavLinks = true
 ShowBreadCrumbs = true
