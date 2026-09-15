@@ -1,5 +1,7 @@
 # research_diary
 
+![research_diary](/assets/research_diary_logo.jpg)
+
 A technical research diary: daily briefs on newly published security and CS work, plus long-form
 deep dives. Content is researched and written by [Google Jules](https://jules.google/), built with
 [Hugo](https://gohugo.io) and [PaperMod](https://github.com/adityatelange/hugo-PaperMod), and
