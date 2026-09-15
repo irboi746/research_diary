@@ -92,10 +92,16 @@ Short version:
 These live only in the Jules UI, which is not version controlled and cannot be restored from git.
 They are recorded here so they can be recreated:
 
-**Daily brief** — Scheduled Task, Daily:
+**arXiv brief** — Scheduled Task, Daily:
 
 ```
-Run the daily brief pipeline exactly as specified in AGENTS.md.
+Run the arXiv brief pipeline exactly as specified in AGENTS.md.
+```
+
+**Conference brief** — Scheduled Task, Weekly:
+
+```
+Run the conference brief pipeline exactly as specified in AGENTS.md.
 ```
 
 **Deep dive** — a normal task, run by hand:
@@ -103,6 +109,15 @@ Run the daily brief pipeline exactly as specified in AGENTS.md.
 ```
 Run the deep research pipeline as specified in AGENTS.md. Topic: <your topic>
 ```
+
+The pipeline names must match the headings in `AGENTS.md` exactly — with a one-line prompt, those
+words are the only thing selecting which procedure runs.
+
+Weekly for the conference brief because all five tier-2 sources are `window = "unseen"` with
+`check = "weekly"`: they publish in one annual burst and then drain, so a daily run would find
+nothing most days. That is a valid outcome — it opens no pull request — but it spends a Jules run to
+discover it. If you do move it to daily, raise `max_conference_age_days` in `staleness.yml` to match,
+or the canary will file an issue about a feed that is behaving correctly.
 
 They are one line on purpose. Everything else lives in `AGENTS.md` and `automation/config/topics.toml`,
 where it is reviewable and diffable — and because a Jules scheduled task **cannot be edited** once
@@ -113,21 +128,34 @@ pull request, not a UI round trip.
 
 `validate-content.yml` runs on every pull request Jules opens:
 
-1. **Path guard** — the diff may only touch `content/news/**`, `content/research/**` and
-   `automation/state/**`. The pipeline's input is untrusted web content fed to an agent with repo
-   write access, so this is the boundary that stops a poisoned paper from editing a workflow.
+1. **Path guard** — the diff may only touch `content/arxiv/**`, `content/news/**`,
+   `content/research/**` and `automation/state/**`. The pipeline's input is untrusted web content
+   fed to an agent with repo write access, so this is the boundary that stops a poisoned paper from
+   editing a workflow.
 2. **Schema** — TOML frontmatter, RFC3339 UTC date, tags from the controlled vocabulary, required
-   sections, a source URL on every item.
-3. **Build** — Hugo must actually render each changed page. `buildFuture = false` means a
+   sections, and grounding: a source URL on *each* item rather than somewhere in the file, every
+   citation matched to a reference and back, no conference index page standing in for a named paper,
+   no two references sharing one URL, no placeholder identifiers.
+3. **Link check** — the DOIs and arXiv IDs cited must resolve, and an arXiv ID must be the paper the
+   post says it is. Only `doi.org` and `arxiv.org` are gating; everything else is reported and not
+   enforced, because publishers such as ACM, Black Hat and CISA return 403 to a datacenter IP and
+   gating on them would fail good pull requests.
+4. **Build** — Hugo must actually render each changed page. `buildFuture = false` means a
    future-dated page is dropped *silently*, so a green build is not by itself evidence.
 
-Passing all three auto-merges and triggers the deploy. Failing leaves the pull request open.
+Passing all four auto-merges and triggers the deploy. Failing leaves the pull request open.
+
+The schema and link checks exist because the earlier contract was prose. `AGENTS.md` has always said
+"every item must carry a source URL", and the validator implemented it as one regular expression over
+the whole file — so a 4,000-word deep dive with 33 references passed on the strength of one working
+link. Ten of those 33 turned out not to support what they were attached to.
 
 ### Health
 
 Nothing in this repo observes the pipeline, so a deleted scheduled task looks exactly like a quiet
-week. `staleness.yml` runs weekly and opens an issue if no brief has landed in three days. It is the
-only monitoring in the system.
+week. `staleness.yml` runs weekly and opens an issue if either feed has gone quiet: three days for
+arXiv, which runs daily against a 48-hour window, and fourteen for conference briefs, which
+legitimately go silent between conference seasons. It is the only monitoring in the system.
 
 ## Deployment
 

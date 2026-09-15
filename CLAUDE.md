@@ -48,6 +48,7 @@ workflow would otherwise be merged automatically.
 
 `automation/scripts/pathguard.py` therefore restricts generated changes to:
 
+- `content/arxiv/*.md`
 - `content/news/*.md`
 - `content/research/*.md`
 - `automation/state/*`
@@ -80,6 +81,47 @@ pull request, and the path check must come before the content checkout.
 The guard also inspects blob modes and both sides of a rename. Neither is cosmetic: `--name-only`
 prints only the destination of a rename, so `git mv .github/workflows/pages.yml content/news/x.md`
 used to read as a single allowed path while the workflow silently vanished.
+
+### Grounding is checked in code, not asked for in prose
+
+`AGENTS.md` has always said "every item must carry a source URL". `validate.py` implemented that as
+one `re.search` over the whole body, so a 4,176-word deep dive with 33 references passed on the
+strength of a single `http`. Ten of those references did not support what they were attached to:
+five attached an invented talk title to a bare conference index URL taken verbatim from
+`topics.toml`, one was the DOI in `automation/examples/research-example.md` with the year changed by
+a digit, one was a real arXiv ID for an unrelated paper, and three were plain 404s.
+
+The lesson is not "write a stricter spec". The agent followed the spec exactly. Anything about
+content quality that is stated only in `AGENTS.md` is advisory; if it matters, it goes in
+`validate.py` (offline, also run in the Jules VM) or `linkcheck.py` (network, gating in CI).
+
+Both use `automation/scripts/postparse.py` for parsing, and the tests there are the important ones:
+every case is a shape the published posts or the shipped examples actually use. The false-positive
+traps, all of which were hit during development:
+
+- Both format examples wrap Also-published bullets and reference entries across two lines. A
+  per-line "every bullet needs a URL" rule fails five items in shipped content.
+- Deep-dive prose sections legitimately contain no URL, so per-item source checks are brief-only.
+- Reference entries appear as both `1.` and `[1]`; citations appear grouped (`[9, 10]`).
+- `content/news/` prose contains `argv[1]`, and code fences contain `##` and URLs.
+
+`linkcheck.py` gates on `doi.org` and `arxiv.org` only. Both answer honestly — an unregistered DOI
+is a 404 and a registered one a 302, **checked without following the redirect**, which sidesteps the
+publisher WAF behind it. Measured against the published posts, `dl.acm.org`, `blackhat.com` and
+`cisa.gov` all 403 a datacenter IP and `usenix.org` times out intermittently, so those are reported
+and never enforced. arXiv rate-limits hard; when its API will not answer, the check skips rather
+than reporting every cited preprint as nonexistent.
+
+The gating linkcheck run lives in its own `auto-merge.yml` job with `contents: read`. It is the one
+step that acts on pull-request *data* (never code), fetching URLs that originated in untrusted pages,
+so it must not share a runner with the merge job's write token.
+
+### Keep the format examples real
+
+`automation/examples/` is the agent's format prompt, and it used to teach the shape with invented
+arXiv IDs and DOIs. A deep dive then produced `arXiv:2605.12345` — the same `26XX.XXXXX` shape — and
+mutated the example's S&P DOI by one digit. Every identifier in those files is now real and
+resolving, and each file says so. Do not put a plausible-looking fake identifier in an example.
 
 ### TOML tables swallow every key below them
 
@@ -122,12 +164,17 @@ git checkout -- go.mod go.sum
 |---|---|
 | Site config, params, menus | `config.toml` |
 | Colours, fonts, layout geometry | `assets/css/extended/custom.css` (concatenated after theme CSS) |
-| Pages and posts | `content/` |
+| arXiv briefs (daily, tier 1) | `content/arxiv/` |
+| Conference briefs (tier 2 and 3) | `content/news/` |
+| Deep dives | `content/research/` |
+| Other pages | `content/` |
 | Static files served at site root | `static/` |
 | Build and deploy | `.github/workflows/pages.yml` |
 | Content pipeline spec (read by Jules) | `AGENTS.md` |
 | Research scope, sources, tag vocabulary | `automation/config/topics.toml` |
 | Pipeline tooling and its tests | `automation/scripts/` |
+| Post parsing shared by the checkers | `automation/scripts/postparse.py` |
+| Citation resolution (network) | `automation/scripts/linkcheck.py` |
 | Deduplication state | `automation/state/seen.ndjson` |
 | Content format references | `automation/examples/` |
 | PR validation (advisory; runs PR code) | `.github/workflows/validate-content.yml` |
@@ -143,6 +190,13 @@ Run the script suite first — it needs no dependencies and catches most breakag
 ```shell
 for t in automation/scripts/test_*.py; do python3 "$t" || break; done
 python3 automation/scripts/validate.py
+```
+
+`linkcheck.py` needs network and is slow (it rate-limits itself per host), so run it only on what
+you changed:
+
+```shell
+python3 automation/scripts/linkcheck.py --files content/research/<post>.md
 ```
 
 Hugo is not installed locally; use a Docker image. CI pins its own Hugo version (`HUGO_VERSION` in
