@@ -310,6 +310,125 @@ run(
     "unknown frontmatter key",
 )
 
+# --- grounding ---------------------------------------------------------------
+# Each of these reproduces something that was actually published and passed CI.
+# The old rule was one URL search over the whole file, so a post with 33
+# references and one working link was clean.
+run(
+    "a brief item with no source URL of its own is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace(f"Source: {PAPER}", "Source: on file"),
+    "has no source URL of its own",
+)
+run(
+    "a brief without a summary key is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace('summary = "One talk on desynchronisation."\n', ""),
+    "require a non-empty 'summary'",
+)
+run(
+    "a brief that does not open with In brief is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace("## In brief", "## Overview"),
+    "must open with '## In brief'",
+)
+run(
+    "an Also published entry with no link is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS + "\n## Also published\n\n- Someone. \"A Paper.\" USENIX Security 2025\n",
+    "has no URL",
+)
+# Wrapping a bullet so the URL lands on the next line is how both shipped
+# examples are written; it must not read as a missing source.
+run(
+    "an Also published entry wrapped onto two lines passes",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS + f'\n## Also published\n\n- Someone. "A Paper." USENIX Security 2025 —\n  {PAPER}\n',
+    None,
+)
+run(
+    "citing a conference index page for a specific work is rejected",
+    "2026-09-15-fuzzing.md",
+    GOOD_RESEARCH.replace(
+        PAPER, "https://www.usenix.org/conference/usenixsecurity24/technical-sessions"
+    ),
+    "cites a conference index page",
+)
+run(
+    "one URL standing in for several references is rejected",
+    "2026-09-15-fuzzing.md",
+    GOOD_RESEARCH.replace("Some background [1].", "Some background [1][2].").replace(
+        f"1. Mu, K. \"The Silent Danger in HTTP.\" USENIX Security 2025. {PAPER}",
+        f'1. Mu, K. "The Silent Danger in HTTP." USENIX Security 2025. {PAPER}\n'
+        f'2. Mu, K. "Something Else Entirely." USENIX Security 2025. {PAPER}',
+    ),
+    "point at the same URL",
+)
+run(
+    "a reference nothing cites is rejected",
+    "2026-09-15-fuzzing.md",
+    GOOD_RESEARCH.replace(
+        f"1. Mu, K. \"The Silent Danger in HTTP.\" USENIX Security 2025. {PAPER}",
+        f'1. Mu, K. "The Silent Danger in HTTP." USENIX Security 2025. {PAPER}\n'
+        f'2. Nobody, A. "Uncited." USENIX Security 2025. https://www.usenix.org/conference/'
+        f"usenixsecurity25/presentation/luo-kaixuan",
+    ),
+    "reference [2] is never cited",
+)
+run(
+    "a citation with no reference entry is rejected",
+    "2026-09-15-fuzzing.md",
+    GOOD_RESEARCH.replace("Where things stand [1].", "Where things stand [1], [7]."),
+    "citation [7] has no matching entry",
+)
+run(
+    "a reference with no locator at all is rejected",
+    "2026-09-15-fuzzing.md",
+    GOOD_RESEARCH.replace(
+        f"1. Mu, K. \"The Silent Danger in HTTP.\" USENIX Security 2025. {PAPER}",
+        '1. Mu, K. "The Silent Danger in HTTP." USENIX Security 2025.',
+    ),
+    "no URL, DOI or arXiv ID",
+)
+# Grouped markers are used in the published deep dives; a naive \[\d+\] scan
+# misses them and then reports every grouped reference as uncited.
+run(
+    "grouped citation markers are understood",
+    "2026-09-15-fuzzing.md",
+    GOOD_RESEARCH.replace("Where things stand [1].", "Where things stand [1, 2].").replace(
+        f"1. Mu, K. \"The Silent Danger in HTTP.\" USENIX Security 2025. {PAPER}",
+        f'1. Mu, K. "The Silent Danger in HTTP." USENIX Security 2025. {PAPER}\n'
+        f'2. Luo, K. "Universal Cross-app Attacks." USENIX Security 2025. https://www.usenix.org/'
+        f"conference/usenixsecurity25/presentation/luo-kaixuan",
+    ),
+    None,
+)
+run(
+    "an array subscript is not read as a citation",
+    "2026-09-15-fuzzing.md",
+    GOOD_RESEARCH.replace("Where things stand [1].", "Where things stand [1]. Check argv[2] first."),
+    None,
+)
+run(
+    "a placeholder arXiv ID is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace(f"Source: {PAPER}", "Source: https://arxiv.org/abs/2609.12345"),
+    "looks like a placeholder",
+)
+run(
+    "an example.com URL is rejected",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace(f"Source: {PAPER}", "Source: https://example.com/paper"),
+    "example.com URL",
+)
+# A URL inside a fenced block is a command, not a citation.
+run(
+    "a URL only present inside a code fence does not count as a source",
+    "2026-09-15-daily-brief.md",
+    GOOD_NEWS.replace(f"Source: {PAPER}", f"```sh\ncurl {PAPER}\n```"),
+    "has no source URL of its own",
+)
+
 # --- the shipped format examples must satisfy the contract they demonstrate ---
 # AGENTS.md points Jules at these files as the format reference. If they drift
 # from the validator, Jules copies a format that then fails in CI.

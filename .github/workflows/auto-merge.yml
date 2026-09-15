@@ -29,7 +29,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Deliberately its own job, with a read-only token and no gh CLI.
+  #
+  # This is the one step that reaches out to the network on the pull request's
+  # behalf: it resolves DOIs and arXiv IDs the agent wrote, and those came from
+  # untrusted pages the agent was reading. That makes it a request-forgery
+  # primitive, so it must not share a runner with the merge job's contents:write
+  # token. It is also the one deviation from the "act on nothing from the pull
+  # request" rule stated above -- it acts on PR *data*, never PR code: the guard
+  # runs first, the scripts come from main, and nothing from the branch executes.
+  #
+  # linkcheck.py itself refuses non-http(s) schemes and any host resolving to a
+  # private, loopback or link-local address.
+  links:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch the pull request's commits
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+$HEAD_SHA:refs/pr-head"
+
+      # Same ordering rule as the merge job: the guard decides what may be laid
+      # into the tree before anything is.
+      - name: Path allowlist, from main
+        run: python3 automation/scripts/pathguard.py --base main --head refs/pr-head
+
+      - name: Resolve what the post cites
+        run: |
+          set -euo pipefail
+          git checkout refs/pr-head -- content
+          python3 automation/scripts/linkcheck.py --changed --base main --head refs/pr-head
+
   merge:
+    needs: [links]
     # head_repository check keeps fork pull requests out, as before. The actor
     # check keeps it to the pipeline's own account rather than any collaborator.
     if: >-

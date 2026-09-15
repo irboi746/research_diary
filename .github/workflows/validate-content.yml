@@ -56,11 +56,21 @@ jobs:
         run: |
           python3 automation/scripts/test_idstate.py
           python3 automation/scripts/test_pathguard.py
+          python3 automation/scripts/test_postparse.py
           python3 automation/scripts/test_validate.py
           python3 automation/scripts/test_arxiv.py
 
       - name: Content schema
         run: python3 automation/scripts/validate.py
+
+      # Advisory here on purpose. This workflow runs the pull request's own copy
+      # of everything, so a green tick is not evidence; auto-merge.yml runs the
+      # gating copy from main. This exists so a dead link shows on the PR without
+      # waiting for the merge gate to reject it.
+      - name: Resolve what the post cites (advisory)
+        continue-on-error: true
+        run: |
+          python3 automation/scripts/linkcheck.py --changed --base "origin/$BASE_REF"
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:

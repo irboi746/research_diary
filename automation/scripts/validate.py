@@ -24,6 +24,8 @@ import re
 import sys
 import tomllib
 
+import postparse
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "automation" / "config" / "topics.toml"
 SECTIONS = {
@@ -60,6 +62,23 @@ MAX_SLUG_LEN = 60
 # into an attribute -- cover.image, canonicalURL, editPost.URL -- is absent on
 # purpose; adding one is a human decision.
 ALLOWED_KEYS = {"title", "date", "type", "tags", "slug", "summary", "draft"}
+
+# Ascending or descending digit runs, the shape a made-up identifier takes when
+# nobody had a real one to hand: 12345, 01234, 98765.
+_DIGITS = "0123456789"
+_RUNS = {
+    s[i : i + n]
+    for s in (_DIGITS, _DIGITS[::-1])
+    for n in (4, 5)
+    for i in range(len(s) - n + 1)
+}
+
+PLACEHOLDER_DENY = (
+    (re.compile(r"https?://(?:www\.)?example\.(?:com|org|net)\b", re.I), "an example.com URL"),
+    (re.compile(r"\b10\.\d{4,9}/(?:xxx+|example|placeholder)", re.I), "a placeholder DOI"),
+    (re.compile(r"\bdoi:\s*(?:TBD|N/?A)\b", re.I), "a missing DOI written as TBD"),
+    (re.compile(r"\bXXXX+\b"), "an XXXX placeholder"),
+)
 
 MARKUP_DENY = (
     (re.compile(r"<\s*(script|iframe|object|embed|form|svg|style|base|link|meta)\b", re.I), "a raw HTML tag"),
@@ -191,7 +210,109 @@ def check_frontmatter_keys(meta: dict, errors: list[str]) -> None:
         )
 
 
-def check_body(section: str, body: str, errors: list[str]) -> None:
+def check_brief_structure(meta: dict, body: str, errors: list[str]) -> None:
+    """Per-item sourcing and the leading summary.
+
+    The old rule was a single URL search over the whole file, which a 4,000-word
+    post with one link satisfied. Hard constraint 7 says every *item* carries its
+    source, so every item is checked.
+    """
+    if not str(meta.get("summary", "")).strip():
+        errors.append("briefs require a non-empty 'summary' key; it is the section-list blurb")
+
+    sections = postparse.split_sections(body)
+    if not sections:
+        errors.append("brief has no '##' item headings")
+        return
+    if sections[0][0].casefold() != "in brief":
+        errors.append(
+            f"a brief must open with '## In brief' before the first item, got {sections[0][0]!r}"
+        )
+
+    for heading, text in sections:
+        name = heading.casefold()
+        if name == "in brief":
+            continue
+        if name == "also published":
+            for line in postparse.logical_lines(text):
+                if re.match(r"^\s*[-*+]\s", line) and not postparse.urls(line):
+                    errors.append(f"'Also published' entry has no URL: {line.strip()[:70]!r}")
+            continue
+        if name == "references":
+            continue
+        if not postparse.urls(text):
+            errors.append(f"item {heading[:60]!r} has no source URL of its own")
+        if not any(re.match(r"^\s*[-*+]\s", ln) for ln in text.splitlines()):
+            errors.append(f"item {heading[:60]!r} has no bullets")
+
+
+def check_deep_dive_structure(body: str, errors: list[str]) -> None:
+    if not re.search(r"^#{1,3}\s+References\s*$", body, re.MULTILINE):
+        errors.append("deep dives require a '## References' section")
+    for heading in ("Background", "Current State", "Future Outlook"):
+        if not re.search(rf"^#{{1,3}}\s+{heading}\b", body, re.MULTILINE):
+            errors.append(f"deep dives require a '## {heading}' section")
+
+    prose, refs = postparse.split_references(body)
+    if refs is None:
+        return
+
+    entries = postparse.parse_references(refs)
+    if not entries:
+        errors.append("the References section has no numbered entries")
+        return
+
+    cited = postparse.cited_numbers(prose)
+    for n in sorted(cited - set(entries), key=int):
+        errors.append(f"citation [{n}] has no matching entry in References")
+    for n in sorted(set(entries) - cited, key=int):
+        errors.append(f"reference [{n}] is never cited in the prose")
+
+    # Citing the venue index instead of the work is the fabrication signature:
+    # the URL resolves, so it survives a link check and a human skim, while
+    # supporting nothing. See hard constraint 8.
+    indexes = postparse.index_urls()
+    seen: dict[str, list[str]] = {}
+    for n, entry in sorted(entries.items(), key=lambda kv: int(kv[0])):
+        found = postparse.urls(entry)
+        if not found and not postparse.DOI.search(entry) and not postparse.ARXIV_ID.search(entry):
+            errors.append(f"reference [{n}] has no URL, DOI or arXiv ID")
+        for u in found:
+            key = postparse.normalize_url(u)
+            if key in indexes:
+                errors.append(
+                    f"reference [{n}] cites a conference index page ({u}); "
+                    "link the individual paper or talk, not the listing it is on"
+                )
+            seen.setdefault(key, []).append(n)
+
+    for key, nums in seen.items():
+        if len(set(nums)) > 1:
+            errors.append(
+                f"references {', '.join('[' + n + ']' for n in sorted(set(nums), key=int))} "
+                f"all point at the same URL ({key})"
+            )
+
+
+def check_identifiers(body: str, errors: list[str]) -> None:
+    """Reject identifiers that are obviously template values rather than citations."""
+    clean = postparse.strip_code(body)
+    # Deduplicated: a reference line usually writes the ID twice, once as
+    # "arXiv:2609.01234" and once inside the /abs/ URL.
+    suspect = {
+        m.group(1)
+        for m in postparse.ARXIV_ID.finditer(clean)
+        if len(set(m.group(1).split(".")[1])) == 1 or m.group(1).split(".")[1] in _RUNS
+    }
+    for ident in sorted(suspect):
+        errors.append(f"arXiv ID looks like a placeholder, not a real paper: {ident}")
+    for pattern, what in PLACEHOLDER_DENY:
+        m = pattern.search(clean)
+        if m:
+            errors.append(f"body contains {what}: {m.group(0)[:60]!r}")
+
+
+def check_body(section: str, meta: dict, body: str, errors: list[str]) -> None:
     if not body.strip():
         errors.append("body is empty")
         return
@@ -199,12 +320,12 @@ def check_body(section: str, body: str, errors: list[str]) -> None:
     if not URL.search(body):
         errors.append("body contains no source URL; every item must cite where it came from")
 
-    if section == "research":
-        if not re.search(r"^#{1,3}\s+References\s*$", body, re.MULTILINE):
-            errors.append("deep dives require a '## References' section")
-        for heading in ("Background", "Current State", "Future Outlook"):
-            if not re.search(rf"^#{{1,3}}\s+{heading}\b", body, re.MULTILINE):
-                errors.append(f"deep dives require a '## {heading}' section")
+    if section in BRIEFS:
+        check_brief_structure(meta, body, errors)
+    else:
+        check_deep_dive_structure(body, errors)
+
+    check_identifiers(body, errors)
 
 
 def validate_file(path: pathlib.Path, vocab: set[str]) -> list[str]:
@@ -258,7 +379,7 @@ def validate_file(path: pathlib.Path, vocab: set[str]) -> list[str]:
     check_frontmatter_keys(meta, errors)
     check_date(meta, errors)
     check_tags(meta, vocab, errors)
-    check_body(section, body, errors)
+    check_body(section, meta, body, errors)
     check_markup(body, errors)
 
     return [f"{rel}: {e}" for e in errors]

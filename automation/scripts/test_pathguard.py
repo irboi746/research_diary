@@ -60,6 +60,8 @@ DENY = [
     "automation/scripts/test_pathguard.py",
     "automation/scripts/validate.py",
     "automation/scripts/sources.py",
+    "automation/scripts/linkcheck.py",
+    "automation/scripts/postparse.py",
     "automation/config/topics.toml",
     # Traversal.
     "../../etc/passwd",

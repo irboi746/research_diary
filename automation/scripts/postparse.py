@@ -39,8 +39,10 @@ ENTRY = re.compile(r"^(?:\[(?P<b>\d+)\]|(?P<n>\d+)[.)])\s+(?P<text>.*)$")
 
 # A citation marker, including groups like "[9, 10]" and ranges like "[1-3]".
 # The lookbehind rejects argv[1] and foo)[2]; the lookahead rejects the markdown
-# link [1](url) and the link definition [1]: url.
-CITATION = re.compile(r"(?<![\w\])])\[(\d+(?:\s*[-,;–]\s*\d+)*)\](?![(:])")
+# link [1](url) and the link definition [1]: url. "]" is deliberately not in the
+# lookbehind, because "[1][2]" is a real citation style and the subscript case it
+# would also catch, arr[0][1], is code -- which strip_code has already removed.
+CITATION = re.compile(r"(?<![\w)])\[(\d+(?:\s*[-,;–]\s*\d+)*)\](?![(:])")
 
 DOI = re.compile(r"\b10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+[a-zA-Z0-9]")
 ARXIV_ID = re.compile(r"\b(?:arXiv:)?(\d{4}\.\d{4,5})(?:v\d+)?\b", re.I)
@@ -117,7 +119,12 @@ def cited_numbers(prose: str) -> set[str]:
 
 
 def urls(text: str) -> list[str]:
-    return URL.findall(text)
+    """Every URL in the text, ignoring anything inside code.
+
+    Stripping here rather than at the call site: a URL in a shell snippet is a
+    command being demonstrated, not a citation, and every caller wants that.
+    """
+    return URL.findall(strip_code(text))
 
 
 def normalize_url(u: str) -> str:
