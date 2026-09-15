@@ -1,34 +1,55 @@
 +++
-title = "Daily Brief — 2026-09-10"
+title = "Conference Brief — 2026-09-10"
 date = 2026-09-10T06:00:00Z
 type = "news"
-tags = ["cs.CR", "fuzzing", "memory-safety", "arxiv"]
+tags = ["exploitation", "protocol-analysis", "fuzzing", "usenix"]
+summary = "An app-agnostic route from arbitrary file overwrite to code execution on Android, and the first cross-platform look at AirDrop and Quick Share."
 +++
 
 *This file is a format reference, not published content. It lives outside `content/` on purpose.*
 
-## Directed Greybox Fuzzing Without Instrumentation
+*Every identifier below is real and resolves. That is deliberate: the previous version of this file
+used invented IDs to illustrate the shape, and a deep dive copied one, changed a digit, and
+published it. Do not treat any identifier here as a template to adapt — see hard constraint 9 in
+AGENTS.md.*
 
-- Replaces compile-time instrumentation with hardware trace, removing the rebuild step that blocks
-  fuzzing closed-source targets.
-- Reports 2.3× higher path coverage than AFL++ on the Magma benchmark at equal CPU budget.
-- The trace decoder is the bottleneck above 8 cores, which caps the approach on larger fleets.
+## In brief
 
-Lovelace, A., Hopper, G. "Directed Greybox Fuzzing Without Instrumentation." arXiv, 2026.
-arXiv:2609.01234 — https://arxiv.org/abs/2609.01234
+- Both items target privileged code reached without user interaction: one through a file the runtime
+  regenerates, one through daemons that parse untrusted input from anyone in wireless range.
+- The pattern to watch is proximity and background services being treated as trusted input paths.
 
-## A Practical Cross-Core Side Channel on Recent Server Parts
+## Exploiting Android Apps with Counterfeit Art
 
-- Demonstrates a cache-occupancy channel that survives the vendor's 2025 partitioning mitigation.
-- Extracts an AES key from a co-resident VM in about 40 minutes without privileged access.
-- Vendor has assigned a CVE; no microcode fix at time of writing.
+- Arbitrary file overwrite is a common Android bug class whose impact has until now depended on
+  which file a given app happened to expose, making it hard to rate.
+- The technique targets the runtime-generated app image instead of an app-specific file, which makes
+  the escalation to code execution work across apps rather than one at a time, and persist.
+- Generality is the contribution here; the write-up does not quantify how many shipping apps are
+  reachable this way.
 
-Turing, A. et al. "A Practical Cross-Core Side Channel." USENIX Security 2026.
-https://www.usenix.org/conference/usenixsecurity26/presentation/turing
+Fall, R.-D., Mao, P., EPFL; Wagner, M., Asymmetric Research; Payer, M., EPFL. "Exploiting Android
+Apps with Counterfeit Art." USENIX WOOT 2026.
+https://www.usenix.org/conference/woot26/presentation/fall
+
+## Protocol Prying: Systematic Vulnerability Research in the AirDrop and Android Quick Share Proximity Transfer Protocols
+
+- First cross-platform reverse engineering and protocol-aware fuzzing of both proximity transfer
+  stacks, which are proprietary and undocumented despite running on a reported five billion devices.
+- The exposure is that both are reachable from wireless proximity with no prior pairing, and both
+  parse layered serialized formats — binary plists, CPIO archives, protocol buffers, UKEY2
+  handshakes — inside privileged daemons, which is a zero-click surface by construction.
+- Fuzzing a reverse-engineered protocol bounds coverage by how completely the stack was recovered,
+  so absence of findings in a region is not evidence about it.
+
+Ale Ebrahim, A., Tippenhauer, N. O., CISPA Helmholtz Center for Information Security. "Protocol
+Prying: Systematic Vulnerability Research in the AirDrop and Android Quick Share Proximity Transfer
+Protocols." USENIX WOOT 2026.
+https://www.usenix.org/conference/woot26/presentation/ebrahim
 
 ## Also published
 
-- Hamilton, M. "Formal Verification of a Bootloader." arXiv:2609.01300 —
-  https://arxiv.org/abs/2609.01300
-- Clarke, E. "Notes on Symbolic Execution at Scale." DEF CON 34 —
-  https://media.defcon.org/DEF%20CON%2034/
+- Yu, Z. et al. "DRVFuzz: Data-Sensitive RISC-V CPU Fuzzing." USENIX Security 2026 —
+  https://www.usenix.org/conference/usenixsecurity26/presentation/yu-zehong
+- Jia, Z. et al. "PANGOLIN: Fuzzing Multilingual IoT Firmware with LLM-Driven Code Analysis."
+  USENIX Security 2026 — https://www.usenix.org/conference/usenixsecurity26/presentation/jia-zhipeng

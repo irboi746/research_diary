@@ -315,6 +315,7 @@ run(
 # from the validator, Jules copies a format that then fails in CI.
 EXAMPLES = pathlib.Path(__file__).resolve().parents[1] / "examples"
 for example, target_name in (
+    ("arxiv-example.md", "2026-09-10-arxiv-brief.md"),
     ("news-example.md", "2026-09-10-daily-brief.md"),
     ("research-example.md", "2026-09-10-directed-fuzzing.md"),
 ):

@@ -1,75 +1,135 @@
 +++
-title = "Daily Brief — 2026-09-14"
+title = "Conference Brief — 2026-09-14"
 date = 2026-09-14T06:00:00Z
 type = "news"
-tags = ["fuzzing", "binary-analysis", "side-channel", "usenix", "llm-security"]
+tags = ["fuzzing", "exploitation", "protocol-analysis", "llm-security", "usenix"]
+summary = "USENIX Security and WOOT 2026: an app-agnostic route from file overwrite to code execution on Android, the first look inside AirDrop and Quick Share, and three fuzzers aimed at places fuzzers have not been."
 +++
+
+## In brief
+
+- Four of the seven items are fuzzing work, and all four move the target rather than the technique:
+  the Bluetooth host stack instead of the controller, RISC-V data paths instead of control flow,
+  proprietary proximity protocols instead of file formats.
+- Two independent items land on privileged background services reached without user interaction —
+  the recurring theme of the batch.
+- Most of these are accepted-paper listings without published full text, so the entries below are
+  necessarily thin on results; they are pointers, not summaries of findings.
 
 ## Exploiting Android Apps with Counterfeit Art
 
-- Arbitrary file overwrite vulnerabilities are common in Android apps.
-- However, the security impact of such vulnerabilities has so far been highly app-dependent.
-- We present a new, app-agnostic, persistent technique that turns arbitrary file overwrites into code execution by targeting the runtime-generated app image file.
+- Arbitrary file overwrite is a common Android bug class whose impact has until now depended on
+  which file a particular app happened to expose, making it hard to rate consistently.
+- The technique targets the runtime-generated app image rather than an app-specific file, which is
+  what makes the escalation to code execution app-agnostic and persistent.
+- Generality is the claim; the listing does not say how many shipping apps are reachable this way.
 
-Rokhaya-Diamil Fall and Philipp Mao, EPFL; Martin Wagner, Asymmetric Research; Mathias Payer, EPFL "Exploiting Android Apps with Counterfeit Art." USENIX WOOT 2026.
-https://www.usenix.org/conference/woot26/presentation/fall
+*Abstract only — full text not retrieved.*
+
+Fall, R.-D., Mao, P., Wagner, M., Payer, M. "Exploiting Android Apps with Counterfeit Art."
+USENIX WOOT 2026. https://www.usenix.org/conference/woot26/presentation/fall
 
 ## Protocol Prying: Systematic Vulnerability Research in the AirDrop and Android Quick Share Proximity Transfer Protocols
 
-- Apple AirDrop and Google/Samsung Quick Share are proximity file-transfer protocols used by over five billion devices, yet their application-layer security properties remain largely unstudied because both stacks are proprietary and undocumented.
-- Both protocols are reachable from wireless proximity without any prior pairing and process complex serialized content (binary plists, CPIO archives, Protocol Buffers, UKEY2handshakes)inside privileged daemons,making them attractive zero-click targets across multiple operating systems.
-- We perform the first cross-platform reverse engineering and protocol-aware fuzzing study of both stacks.
+- First cross-platform reverse engineering and protocol-aware fuzzing of both proximity transfer
+  stacks, which are proprietary and undocumented despite a reported five billion devices running
+  one or the other.
+- The surface is zero-click by construction: both are reachable from wireless proximity with no
+  prior pairing, and both parse layered serialized formats — binary plists, CPIO archives, protocol
+  buffers, UKEY2 handshakes — inside privileged daemons.
+- Coverage is bounded by how completely the stacks were reverse-engineered, so quiet regions are not
+  evidence of their absence of bugs.
 
-Arash Ale Ebrahim and Nils Ole Tippenhauer, CISPA Helmholtz Center for Information Security "Protocol Prying: Systematic Vulnerability Research in the AirDrop and Android Quick Share Proximity Transfer Protocols." USENIX WOOT 2026.
+*Abstract only — full text not retrieved.*
+
+Ale Ebrahim, A., Tippenhauer, N. O. "Protocol Prying: Systematic Vulnerability Research in the
+AirDrop and Android Quick Share Proximity Transfer Protocols." USENIX WOOT 2026.
 https://www.usenix.org/conference/woot26/presentation/ebrahim
 
 ## FuzzBT: Holistic-State-Guided Fuzzing for Bluetooth Host Stack in Kernels
 
-- Bluetooth is both pervasive and vulnerable, yet fuzzing Bluetooth is challenging.
-- While research on Bluetooth fuzzing has advanced to emulate Bluetooth devices and generate effective inputs for controllers, the host stack has been overlooked.
-- The host stack is responsible for issuing commands to controllers, providing API abstractions for user applications, establishing logical links for asynchronous connections, and multiplexing channels.
+- Bluetooth fuzzing work to date has concentrated on emulating devices and driving the controller;
+  the host stack, which lives in the kernel, has been left largely untested.
+- That matters because the host stack is where the protocol state actually accumulates — it issues
+  controller commands, exposes the API to userspace, establishes logical links and multiplexes
+  channels — so a fuzzer that ignores that state cannot reach most of it.
+- The approach is to guide fuzzing by whole-stack state rather than per-message validity; the
+  listing gives no bug counts or coverage figures.
 
-Sungwoo Kim, Purdue University; Hui Peng, Google, Inc.; Imtiaz Karim, The University of Texas at Dallas; Ruoyu Wu, Purdue University; Jianliang Wu, Simon Fraser University; Elisa Bertino, Purdue University; Mathias Payer, EPFL; Dave (Jing) Tian, Purdue University "FuzzBT: Holistic-State-Guided Fuzzing for Bluetooth Host Stack in Kernels." USENIX WOOT 2026.
+*Abstract only — full text not retrieved.*
+
+Kim, S., Peng, H., Karim, I., Wu, R., Wu, J., Bertino, E., Payer, M., Tian, D. "FuzzBT:
+Holistic-State-Guided Fuzzing for Bluetooth Host Stack in Kernels." USENIX WOOT 2026.
 https://www.usenix.org/conference/woot26/presentation/kim
 
 ## SoK: PHILTER: Uncovering Security and Functional Gaps in AI-based Phishing Website Detection Literature via an LLM-based Reasoning Framework
 
-- Phishing websites remain a dominant enabler of cybercrime.
-- In response, many academic AI-based phishing website detection methods have been developed, often inspiring the design of real-world systems.
-- Although most studies report high accuracy, it remains unclear whether they meet real-world requirements such as resilience to evolving phishing tactics, robustness on diverse benign pages, interpretability, and privacy.
+- A systematisation of the AI phishing-detection literature, using an LLM-based reasoning framework
+  to audit published methods rather than to detect phishing.
+- The question it puts to the field is whether high reported accuracy survives four requirements
+  that deployment imposes and papers rarely test: resilience to evolving tactics, robustness on
+  diverse benign pages, interpretability, and privacy.
+- It evaluates the literature, not deployed systems, so it bounds what the published record
+  supports rather than measuring what production detectors do.
 
-Mahbub Alam, Texas A&M University; Muhammad Lutfor Rahman, California State University San Marcos; Sonjoy Kumar Paul, Amy W. Hays, Aftab Hussain, Md Imanul Huq, and Nitesh Saxena, Texas A&M University "SoK: PHILTER: Uncovering Security and Functional Gaps in AI-based Phishing Website Detection Literature via an LLM-based Reasoning Framework." USENIX Security 2026.
+*Abstract only — full text not retrieved.*
+
+Alam, M., Rahman, M. L., Paul, S. K., Hays, A. W., Hussain, A., Huq, M. I., Saxena, N. "SoK:
+PHILTER: Uncovering Security and Functional Gaps in AI-based Phishing Website Detection Literature
+via an LLM-based Reasoning Framework." USENIX Security 2026.
 https://www.usenix.org/conference/usenixsecurity26/presentation/alam
 
 ## DRVFuzz: Data-Sensitive RISC-V CPU Fuzzing
 
-- The rapid adoption of RISC-V across modern computing systems has made the security integrity of its implementations a paramount concern.
-- Logic bugs in RISC-V cores can lead to critical failures, such as faulty privilege transitions and architectural state corruption.
-- While hardware fuzzing has emerged as a powerful technique for automated bug discovery, existing frameworks remain largely data-agnostic.
+- Hardware fuzzers for CPU cores are mostly data-agnostic: they mutate instruction sequences and
+  score on control-path coverage, which leaves bugs that only manifest for particular operand values
+  out of reach.
+- DRVFuzz makes the data sensitive part of the search, aimed at the RISC-V logic bugs that produce
+  faulty privilege transitions and architectural state corruption.
+- No comparison against existing hardware fuzzers is given in the listing.
 
-Zehong Yu, Tsinghua University; Yuanliang Chen, Renmin University of China; Zhen Yan, Xudong Zhang, Zhensheng Xian, and Yu Jiang, Tsinghua University "DRVFuzz: Data-Sensitive RISC-V CPU Fuzzing." USENIX Security 2026.
+*Abstract only — full text not retrieved.*
+
+Yu, Z., Chen, Y., Yan, Z., Zhang, X., Xian, Z., Jiang, Y. "DRVFuzz: Data-Sensitive RISC-V CPU
+Fuzzing." USENIX Security 2026.
 https://www.usenix.org/conference/usenixsecurity26/presentation/yu-zehong
 
 ## You Have Been LaTeXpOsEd: A Large-Scale Systematic Analysis of Information Leakage in Preprint Archives Using Large Language Models
 
-- In this work, we present the first large-scale security audit of the arXiv preprint repository, analyzing over 1.2 TB of data from 100,000 arXiv submissions to report on systemic sensitive information leakage.
-- When authors upload submissions, they publish not only a PDF but also auxiliary code, images, and LaTeX source files containing embedded comments.
+- First large-scale security audit of arXiv itself: 1.2 TB across 100,000 submissions, looking for
+  sensitive information authors did not mean to publish.
+- The leak channel is everything shipped alongside the PDF — auxiliary code, images, and LaTeX
+  source including embedded comments — which authors generally do not think of as published.
+- Of direct relevance to this diary, since arXiv source is a compulsory input here.
 
-Richard A. Dubniczky and Bertalan Borsos, Eötvös Loránd University; Tamas Bisztray, HUN-REN Sztaki; Norbert Tihanyi, Technology Innovation Institute "You Have Been LaTeXpOsEd: A Large-Scale Systematic Analysis of Information Leakage in Preprint Archives Using Large Language Models." USENIX WOOT 2026.
-https://www.usenix.org/conference/woot26/presentation/dubniczky
+*Abstract only — full text not retrieved.*
+
+Dubniczky, R. A., Borsos, B., Bisztray, T., Tihanyi, N. "You Have Been LaTeXpOsEd: A Large-Scale
+Systematic Analysis of Information Leakage in Preprint Archives Using Large Language Models."
+USENIX WOOT 2026. https://www.usenix.org/conference/woot26/presentation/dubniczky
 
 ## Enjoy the Free Lunch, Someone Paid for Us: Escaping Resource Limits of MicroVM-based Containers
 
-- MicroVM-based containers are increasingly deployed in public clouds (e.g., AWS, Azure, and Alibaba Cloud) to combine container efficiency with strong isolation.
+- MicroVM-based containers are deployed across AWS, Azure and Alibaba Cloud to get container
+  density with VM-grade isolation; the resource limits that make that economics work are the target
+  here.
+- The escape is of the resource accounting rather than the isolation boundary — a tenant obtaining
+  more CPU, memory or I/O than was provisioned, at the expense of co-tenants and the provider.
 
-Shiwen Wang, State Key Laboratory of Cyberspace Security Defense, Institute of Information Engineering, CAS, and School of Cyber Security, University of Chinese Academy of Sciences; Wu Luo, State Key Laboratory of Cyberspace Security Defense, Institute of Information Engineering, CAS; Kaicheng Liu and Zheyuan Xu, State Key Laboratory of Cyberspace Security Defense, Institute of Information Engineering, CAS, and School of Cyber Security, University of Chinese Academy of Sciences; Yaowen Zheng, Wenhao Wang, Shijun Zhao, Peinan Li, and Rui Hou, State Key Laboratory of Cyberspace Security Defense, Institute of Information Engineering, CAS "Enjoy the Free Lunch, Someone Paid for Us: Escaping Resource Limits of MicroVM-based Containers." USENIX Security 2026.
-https://www.usenix.org/conference/usenixsecurity26/presentation/wang-shiwen
+*Abstract only — full text not retrieved.*
+
+Wang, S., Luo, W., Liu, K., Xu, Z., Zheng, Y., Wang, W., Zhao, S., Li, P., Hou, R. "Enjoy the Free
+Lunch, Someone Paid for Us: Escaping Resource Limits of MicroVM-based Containers."
+USENIX Security 2026. https://www.usenix.org/conference/usenixsecurity26/presentation/wang-shiwen
 
 ## Also published
 
-- Nibesh Shrestha, Supra Research; Aniket Kate, Supra Research / Purdue University; Kartik Nayak, Duke University "Hydrangea: Optimistic Two-Round Partial Synchrony with Improved Fault Resilience." USENIX Security 2026 —
+- Shrestha, N., Kate, A., Nayak, K. "Hydrangea: Optimistic Two-Round Partial Synchrony with Improved
+  Fault Resilience." USENIX Security 2026 —
   https://www.usenix.org/conference/usenixsecurity26/presentation/shrestha
-- Ruben Sturm and Anton Schelfhout, DistriNet, KU Leuven; Merve Gülmez, Ericsson Security Research; Adriaan Jacobs and Stijn Volckaert, DistriNet, KU Leuven "Secpoline: A Scalable Approach to Build Secure In-Process Syscall Interposers." USENIX Security 2026 —
+- Sturm, R., Schelfhout, A., Gülmez, M., Jacobs, A., Volckaert, S. "Secpoline: A Scalable Approach
+  to Build Secure In-Process Syscall Interposers." USENIX Security 2026 —
   https://www.usenix.org/conference/usenixsecurity26/presentation/sturm
-- Noah Mauthe, Eric Ackermann, and Sven Bugiel, CISPA Helmholtz Center for Information Security "SoK: Capability Operating Systems: Is the Future Finally Here?." USENIX Security 2026 —
+- Mauthe, N., Ackermann, E., Bugiel, S. "SoK: Capability Operating Systems: Is the Future Finally
+  Here?" USENIX Security 2026 —
   https://www.usenix.org/conference/usenixsecurity26/presentation/mauthe
